@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling>=1.4.0"]
+requires = ["hatchling>=1.4.0", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
@@ -7,9 +7,9 @@ packages = ["src/foo"]
 
 
 [project]
-name = "ryoma-dev"
-version = "0.0.1"
-description = "Root project for Ryoma AI Platform – now compatible with Pydantic v2"
+name = "ryoma-nicer"
+dynamic = ["version"]
+description = "a clone from the root project for Ryoma AI Platform – made compatible with Pydantic v2"
 license = {file = "LICENSE"}
 readme = "README.md"
 requires-python = ">=3.10"
@@ -30,6 +30,9 @@ dependencies = [
     "openai-responses>=0.10.0",
     "coverage-badge>=1.1.2",
 ]
+
+[tool.hatch.version]
+source = "vcs"
 
 [tool.uv.sources]
 ryoma_ai = { workspace = true}
