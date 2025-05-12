@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field
 
 
 class Column(BaseModel):
@@ -14,17 +14,13 @@ class Column(BaseModel):
     primary_key: Optional[bool] = Field(
         None, description="Whether the column is a primary key"
     )
-
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class Table(BaseModel):
     table_name: str = Field(..., description="Name of the table")
     columns: List[Column] = Field(..., description="List of columns in the table")
-
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class Schema(BaseModel):
@@ -32,9 +28,7 @@ class Schema(BaseModel):
     tables: Optional[List[Table]] = Field(
         None, description="List of tables in the schema"
     )
-
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class Catalog(BaseModel):
@@ -44,6 +38,4 @@ class Catalog(BaseModel):
     schemas: Optional[List[Schema]] = Field(
         None, description="List of catalog schemas in the catalog"
     )
-
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
