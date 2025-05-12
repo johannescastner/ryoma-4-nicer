@@ -9,7 +9,7 @@ packages = ["src/foo"]
 [project]
 name = "ryoma-dev"
 version = "0.0.1"
-description = "Root project for Ryoma AI Platform"
+description = "Root project for Ryoma AI Platform – now compatible with Pydantic v2"
 license = {file = "LICENSE"}
 readme = "README.md"
 requires-python = ">=3.10"

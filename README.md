@@ -1,5 +1,5 @@
 # Ryoma
-AI Powered Data Agent framework, a comprehensive solution for data analysis, engineering, and visualization. 
+AI Powered Data Agent framework, a comprehensive solution for data analysis, engineering, and visualization. This version is compatible with pydandic v2. 
 
 
 [![Build status](https://github.com/project-ryoma/ryoma/workflows/build/badge.svg)](https://github.com/project-ryoma/ryoma/actions/workflows/build.yml?query=workflow%3Abuild)
