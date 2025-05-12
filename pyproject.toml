@@ -33,6 +33,8 @@ dependencies = [
 
 [tool.hatch.version]
 source = "vcs"
+tag-pattern = "^v(?P<version>\\d+\\.\\d+\\.\\d+)(?:-.*)?$"
+fallback-version = "0.1.0"
 
 [tool.uv.sources]
 ryoma_ai = { workspace = true}
