@@ -2,21 +2,16 @@
 requires = ["hatchling>=1.4.0", "hatch-vcs"]
 build-backend = "hatchling.build"
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/foo"]
-
-
 [project]
 name = "ryoma-nicer"
-dynamic = ["version"]
+version = "0.1.1"
 description = "a clone from the root project for Ryoma AI Platform – made compatible with Pydantic v2"
 license = {file = "LICENSE"}
 readme = "README.md"
 requires-python = ">=3.10"
 
 dependencies = [
-    "ryoma_lab[snowflake, pyspark, postgres, sqlite, mysql, bigquery]",
-    "ryoma_ai",
+    "pydantic>=2.0.0,<3.0.0",
     "pytest >= 6.2.5",
     "black >= 23.3.0",
     "isort >= 5.9.3",
@@ -31,9 +26,19 @@ dependencies = [
     "coverage-badge>=1.1.2",
 ]
 
+[tool.hatch.build.targets.wheel]
+packages = [
+  "src/ryoma_ai/ryoma_ai",
+  "src/ryoma_lab/ryoma_lab"
+]
+
+[tool.hatch.packages]
+ryoma_ai  = { from = "src" }
+ryoma_lab = { from = "src" }
+
 [tool.hatch.version]
 source = "vcs"
-tag-pattern = "^v(?P<version>\\d+\\.\\d+\\.\\d+)(?:-.*)?$"
+tag-pattern = "^v(?P<version>\\d+\\.\\d+\\.\\d+(?:-[^+]+)?)$"
 fallback-version = "0.1.0"
 
 [tool.uv.sources]
@@ -41,7 +46,7 @@ ryoma_ai = { workspace = true}
 ryoma_lab = { workspace = true}
 
 [tool.uv.workspace]
-members = ["packages/ryoma_ai", "packages/ryoma_lab"]
+members = ["src/ryoma_ai", "src/ryoma_lab"]
 
 [tool.isort]
 profile = "black"
