@@ -148,7 +148,7 @@ class WorkflowAgent(ChatAgent):
             # We are in the tool node, but the user has asked a new question
             # We need to deny the tool call and continue with the user's question
             tool_calls = self.get_current_tool_calls()
-            return ChatPromptValue(message=[
+            return ChatPromptValue(messages=[
                     ToolMessage(
                         tool_call_id=tool_calls[0]["id"],
                         content=f"Tool call denied by user. Reasoning: '{question}'. Continue assisting, accounting for the user's input.",
