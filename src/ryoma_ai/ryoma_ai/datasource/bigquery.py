@@ -43,3 +43,14 @@ class BigqueryDataSource(SqlDataSource):
         )
 
         job.launch()
+
+    def get_query_plan(self, query: str):                 # noqa: N802
+        """
+        BigQuery supports `EXPLAIN`.  We return an ibis Table so Ryoma
+        can pretty-print it or inspect cost estimates.
+        """
+        conn = self.connect()
+        return conn.sql(f"EXPLAIN {query}")
+
+class BigQueryDataSource(BigqueryDataSource):
+    pass
