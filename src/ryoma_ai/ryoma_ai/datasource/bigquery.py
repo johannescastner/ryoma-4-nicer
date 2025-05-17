@@ -6,23 +6,32 @@ from databuilder.job.job import DefaultJob
 from databuilder.loader.base_loader import Loader
 from databuilder.task.task import DefaultTask
 from ibis import BaseBackend
-from langchain_core.pydantic_v1 import Field
 from pyhocon import ConfigFactory
 from ryoma_ai.datasource.base import SqlDataSource
 
 
-class BigqueryDataSource(SqlDataSource):
-    project_id: str = Field(..., description="Bigquery current_store ID")
-    dataset_id: str = Field(..., description="Bigquery dataset ID")
-    credentials: Optional[str] = Field(None, description="Path to the credentials file")
+class BigQueryDataSource(SqlDataSource):
+    def __init__(
+        self,
+        project_id: str,
+        dataset_id: Optional[str] = None,
+        credentials: Optional[str] = None,
+    ):
+        # Tell the SqlDataSource base which 'database' (i.e. dataset) to use.
+        super().__init__(database=dataset_id)
+        self.project_id  = project_id
+        self.dataset_id  = dataset_id
+        self.credentials = credentials
 
     def _connect(self, **kwargs) -> BaseBackend:
-        return ibis.bigquery.connect(
-            project_id=self.project_id,
-            dataset_id=self.dataset_id,
-            credentials=self.credentials,
-            **kwargs,
-        )
+        connect_args: dict[str, Any] = {"project_id": self.project_id, **kwargs}
+        if self.dataset_id:
+            connect_args["dataset_id"] = self.dataset_id
+        if self.credentials:
+            connect_args["credentials"] = self.credentials
+
+        logging.info("Connecting to BigQuery with %r", connect_args)
+        return ibis.bigquery.connect(**connect_args)
 
     def crawl_catalogs(self, loader: Loader, where_clause_suffix: Optional[str] = ""):
         from databuilder.extractor.bigquery_metadata_extractor import (
@@ -52,5 +61,8 @@ class BigqueryDataSource(SqlDataSource):
         conn = self.connect()
         return conn.sql(f"EXPLAIN {query}")
 
-class BigQueryDataSource(BigqueryDataSource):
+class BigqueryDataSource(BigQueryDataSource):
+    """
+    a class to serve backwards compatibility for those who already are using the old BigqueryDataSource in their code. 
+    """
     pass
