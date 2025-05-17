@@ -62,7 +62,10 @@ class BigQueryDataSource(SqlDataSource):
         return conn.sql(f"EXPLAIN {query}")
 
 class BigqueryDataSource(BigQueryDataSource):
-    """
-    a class to serve backwards compatibility for those who already are using the old BigqueryDataSource in their code. 
-    """
-    pass
+    def __init__(self, *args, **kwargs):
+        import warnings
+        warnings.warn(
+            "BigqueryDataSource is deprecated; please use BigQueryDataSource instead",
+            DeprecationWarning,
+        )
+        super().__init__(*args, **kwargs)
