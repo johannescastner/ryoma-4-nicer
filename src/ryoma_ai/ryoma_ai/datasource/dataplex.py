@@ -12,7 +12,6 @@ from databuilder.models.table_metadata import ColumnMetadata, TableMetadata
 from databuilder.publisher.base_publisher import Publisher
 
 from google.cloud import dataplex_v1
-from google.cloud import datacatalog_v1
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.INFO)
