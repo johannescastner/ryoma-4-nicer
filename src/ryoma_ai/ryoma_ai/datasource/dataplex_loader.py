@@ -16,9 +16,6 @@ class DataplexLoader(Loader):
     Dataplex-extracted metadata records back into our runtime store.
     """
     def init(self, conf: ConfigTree) -> None:
-        # Initialize and configure the extractor with the same conf
-        self.extractor = DataplexMetadataExtractor()
-        self.extractor.init(conf)
 
         # Initialize the publisher (expects project_id + credentials in conf)
         self.publisher = DataplexPublisher(
