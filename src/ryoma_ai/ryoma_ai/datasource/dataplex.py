@@ -5,7 +5,6 @@ from typing import Iterator, Any, Dict
 
 from pyhocon import ConfigTree
 from databuilder.extractor.base_extractor import Extractor
-from databuilder.loader.base_loader import Loader
 from databuilder.task.task import DefaultTask
 from databuilder.job.job import DefaultJob
 from databuilder.models.table_metadata import ColumnMetadata, TableMetadata
@@ -84,7 +83,7 @@ class DataplexPublisher(Publisher):
 
     def init(self, conf: ConfigTree) -> None:
         self.catalog = dataplex_v1.CatalogServiceClient()
-        self.location = conf.get_string("gcp_location", "eu")
+        self.location = conf.get_string("gcp_location", "eu-west1")
         self.project = conf.get_string("project_id")
 
     def publish(self, records: Iterator[TableMetadata]) -> None:
@@ -93,9 +92,9 @@ class DataplexPublisher(Publisher):
             eg_id = tbl.database
             eg_name = f"{parent}/entryGroups/{eg_id}"
             try:
-                self.dc.get_entry_group(name=eg_name)
+                self.catalog.get_entry_group(name=eg_name)
             except Exception:
-                self.dc.create_entry_group(
+                self.catalog.create_entry_group(
                     parent=parent,
                     entry_group_id=eg_id,
                     entry_group=dataplex_v1.EntryGroup(display_name=eg_id),
@@ -149,8 +148,6 @@ def crawl_with_dataplex(conf: ConfigTree) -> None:
     publisher = DataplexPublisher()
     publisher.init(conf)
     task = DefaultTask(extractor=extractor, loader=loader)
-    publisher = DataplexPublisher()
-    publisher.init(conf)    
     
     job = DefaultJob(conf=conf, task=task, publisher=publisher)
     job.launch()
