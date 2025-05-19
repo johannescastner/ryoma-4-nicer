@@ -35,15 +35,14 @@ class DataplexMetadataExtractor(Extractor):
         self._iter = self._iterate_tables()
 
     def _iterate_tables(self) -> Iterator[TableMetadata]:
-        lakes = dataplex_v1.LakesClient().list_lakes(parent=self.parent).lakes
-        for lake in lakes:
-            zones = dataplex_v1.ZonesClient().list_zones(parent=lake.name).zones
-            for zone in zones:
-                assets = dataplex_v1.AssetsClient().list_assets(parent=zone.name).assets
-                for asset in assets:
+        # Directly iterate over the paged responses
+        for lake in dataplex_v1.LakesClient().list_lakes(parent=self.parent):
+            for zone in dataplex_v1.ZonesClient().list_zones(parent=lake.name):
+                for asset in dataplex_v1.AssetsClient().list_assets(parent=zone.name):
                     typ = asset.resource_spec.type_
                     if typ not in ("TABLE", "STREAM"):
                         continue
+
                     schema = asset.resource_spec.schema
                     cols = [
                         ColumnMetadata(
@@ -54,6 +53,7 @@ class DataplexMetadataExtractor(Extractor):
                         )
                         for i, field in enumerate(schema.fields)
                     ]
+
                     yield TableMetadata(
                         database=zone.name.split("/")[-1],
                         cluster=lake.name.split("/")[-1],
