@@ -14,6 +14,10 @@ from ryoma_ai.datasource.dataplex_loader import DataplexLoader
 from google.cloud import dataplex_v1
 from google.protobuf import struct_pb2
 
+#–– magic identifiers for the “generic” table entry and aspect in Dataplex Catalog:
+ENTRY_TYPE  = "projects/dataplex-types/locations/global/entryTypes/generic"
+ASPECT_TYPE = "projects/dataplex-types/locations/global/aspectTypes/generic"
+
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.INFO)
 
@@ -118,11 +122,11 @@ class DataplexPublisher(Publisher):
             )
 
             entry = dataplex_v1.Entry(
-                entry_type="projects/dataplex-types/locations/global/entryTypes/generic",
+                entry_type=ENTRY_TYPE,
                 entry_source=dataplex_v1.EntrySource(description=tbl.description[:250]),
                 aspects={
-                    "dataplex-types.global.generic": dataplex_v1.Aspect(
-                        aspect_type="projects/dataplex-types/locations/global/aspectTypes/generic",
+                    ASPECT_TYPE: dataplex_v1.Aspect(
+                        aspect_type=ASPECT_TYPE,
                         data=schema_struct
                     )
                 },
@@ -151,3 +155,5 @@ def crawl_with_dataplex(conf: ConfigTree) -> None:
     
     job = DefaultJob(conf=conf, task=task, publisher=publisher)
     job.launch()
+    # ensure the loader is closed (flush buffers, etc.)
+    loader.close()
