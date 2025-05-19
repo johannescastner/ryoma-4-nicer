@@ -1,8 +1,14 @@
 # src/ryoma_ai/ryoma_ai/datasource/dataplex_loader.py
+import logging
+from typing import Iterator, Union
 
 from databuilder.loader.base_loader import Loader
 from pyhocon import ConfigTree
+
 from ryoma_ai.datasource.dataplex import DataplexMetadataExtractor, DataplexPublisher
+
+LOGGER = logging.getLogger(__name__)
+LOGGER.setLevel(logging.INFO)
 
 class DataplexLoader(Loader):
     """
@@ -10,23 +16,30 @@ class DataplexLoader(Loader):
     Dataplex-extracted metadata records back into our runtime store.
     """
     def init(self, conf: ConfigTree) -> None:
-        # Extract the same config keys used by our extractor
-        project_id  = conf.get_string(f"{DataplexMetadataExtractor.SCOPE}.project_id")
-        credentials = conf.get_string(f"{DataplexMetadataExtractor.SCOPE}.credentials", None)
+        # Initialize and configure the extractor with the same conf
+        self.extractor = DataplexMetadataExtractor()
+        self.extractor.init(conf)
 
-        # Instantiate the publisher
+        # Initialize the publisher (expects project_id + credentials in conf)
         self.publisher = DataplexPublisher(
-            project_id=project_id,
-            credentials=credentials,
+            project_id=conf.get_string("project_id"),
+            credentials=conf.get("credentials", None),
         )
-        # Prepare any publisher state (schema/table creation, etc.)
-        self.publisher.prepare()
+        # If your publisher has a prepare or setup step:
+        if hasattr(self.publisher, "prepare"):
+            self.publisher.prepare()
 
-    def load(self, record) -> None:
-        # `record` is one of our Pydantic models (Catalog, Schema, Table, Column)
-        # Delegate publishing of each metadata object
-        self.publisher.publish_record(record)
+    def load(self, record: Union[Iterator, object]) -> None:
+        # `record` may be a single TableMetadata or an iterator of them
+        if not hasattr(record, '__iter__') or isinstance(record, (str, bytes)):
+            records = iter([record])
+        else:
+            records = record  # already iterable
+        # Delegate publishing of metadata objects
+        self.publisher.publish(records)
 
     def close(self) -> None:
         # Finalize the publisher (flush buffers, commit transactions, etc.)
-        self.publisher.finish()
+        if hasattr(self.publisher, "finish"):
+            self.publisher.finish()
+
