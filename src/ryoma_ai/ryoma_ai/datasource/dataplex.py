@@ -1,112 +1,143 @@
-import logging
-from typing import Optional, List
+# src/ryoma_ai/ryoma_ai/datasource/dataplex.py
 
-from google.cloud import dataplex_v1
-from google.oauth2.service_account import Credentials
-from pydantic import BaseModel
+import logging
+from typing import Iterator, Any, Dict
+
+from pyhocon import ConfigTree
 from databuilder.extractor.base_extractor import Extractor
 from databuilder.loader.base_loader import Loader
+from databuilder.task.task import DefaultTask
+from databuilder.job.job import DefaultJob
+from databuilder.models.table_metadata import ColumnMetadata, TableMetadata
+from databuilder.publisher.base_publisher import Publisher
 
-from ryoma_ai.datasource.metadata import Catalog, Schema, Table, Column
+from google.cloud import dataplex_v1
+from google.cloud import datacatalog_v1
 
-
-_LOG = logging.getLogger(__name__)
+LOGGER = logging.getLogger(__name__)
+LOGGER.setLevel(logging.INFO)
 
 
 class DataplexMetadataExtractor(Extractor):
     """
-    Extract metadata from Google Cloud Dataplex (universal Data Catalog replacement),
-    producing Ryoma’s Pydantic models (Catalog, Schema, Table, Column) for downstream loading.
-
-    Workflow:
-      1. List Lakes in the given project/location.
-      2. For each Lake, list Zones.
-      3. For each Zone, list Assets of type TABLE or STREAM.
-      4. For each Asset, fetch its schema fields and map to Column.
-
-    Yields (in extract):
-      Catalog, then Schema, then Table, then Column instances, in depth-first order.
+    Extract metadata from Cloud Dataplex:
+      - list Lakes → Zones → Assets
+      - for TABLE/STREAM assets, pull out schema fields
+      - emit TableMetadata(ColumnMetadata…) for each table
     """
 
-    def __init__(
-        self,
-        project_id: str,
-        location: str,
-        credentials: Credentials,
-    ):
-        self.project_id = project_id
-        self.location = location
-        self.credentials = credentials
-        self.client = dataplex_v1.DataplexServiceClient(credentials=credentials)
-        self._items: List[BaseModel] = []
-        self._index = 0
+    def init(self, conf: ConfigTree) -> None:
+        project = conf.get_string("project_id")
+        # Dataplex Content API for listing assets
+        self.content_client = dataplex_v1.ContentServiceClient()
+        # Parent path covers all locations: projects/{project}/locations/-
+        self.parent = f"projects/{project}/locations/-"
+        self._iter = self._iterate_tables()
 
-    def init(self) -> None:
-        parent = f"projects/{self.project_id}/locations/{self.location}"
-        _LOG.info("Listing Dataplex lakes under %s", parent)
-        for lake in self.client.list_lakes(request={"parent": parent}):
-            # Treat each lake as a 'Catalog'
-            catalog = Catalog(catalog_name=lake.name)
-            self._items.append(catalog)
+    def _iterate_tables(self) -> Iterator[TableMetadata]:
+        lakes = dataplex_v1.LakesClient().list_lakes(parent=self.parent).lakes
+        for lake in lakes:
+            zones = dataplex_v1.ZonesClient().list_zones(parent=lake.name).zones
+            for zone in zones:
+                assets = dataplex_v1.AssetsClient().list_assets(parent=zone.name).assets
+                for asset in assets:
+                    typ = asset.resource_spec.type_
+                    if typ not in ("TABLE", "STREAM"):
+                        continue
+                    schema = asset.resource_spec.schema
+                    cols = [
+                        ColumnMetadata(
+                            name=field.name,
+                            col_type=field.type_,
+                            description=field.description or "",
+                            sort_order=i,
+                        )
+                        for i, field in enumerate(schema.fields)
+                    ]
+                    yield TableMetadata(
+                        database=zone.name.split("/")[-1],
+                        cluster=lake.name.split("/")[-1],
+                        schema=zone.name.split("/")[-1],
+                        name=asset.resource_spec.name,
+                        description=asset.description or "",
+                        columns=cols,
+                        is_view=False,
+                    )
 
-            zone_parent = lake.name
-            _LOG.info("  Listing zones under lake %s", lake.name)
-            for zone in self.client.list_zones(request={"parent": zone_parent}):
-                schema = Schema(schema_name=zone.name)
-                catalog.schemas = catalog.schemas or []
-                catalog.schemas.append(schema)
-                self._items.append(schema)
+    def extract(self) -> Any:
+        try:
+            return next(self._iter)
+        except StopIteration:
+            return None
 
-                asset_parent = zone.name
-                filter_str = "asset_type=TABLE OR asset_type=STREAM"
-                _LOG.info("    Listing assets in zone %s (filter=%s)", zone.name, filter_str)
-                for asset in self.client.list_assets(request={"parent": asset_parent, "filter": filter_str}):
-                    tbl = Table(table_name=asset.name.split('/')[-1], columns=[])
-                    schema.tables = schema.tables or []
-                    schema.tables.append(tbl)
-                    self._items.append(tbl)
-
-                    # Fetch schema fields (Dataplex resource_spec.schema.fields)
-                    resource_schema = getattr(asset.resource_spec, "schema", None)
-                    if resource_schema and hasattr(resource_schema, 'fields'):
-                        for field in resource_schema.fields:
-                            col = Column(
-                                name=field.name,
-                                type=field.type_,
-                                nullable=(field.mode_ != dataplex_v1.Field.Mode.REQUIRED),
-                                primary_key=False,
-                            )
-                            tbl.columns.append(col)
-                            self._items.append(col)
-
-    def extract(self) -> Optional[BaseModel]:
-        if self._index < len(self._items):
-            item = self._items[self._index]
-            self._index += 1
-            return item
-        return None
-
-    def get_scope(self) -> dict:
-        """
-        Return context for loader (unused here)."""
-        return { }
+    def get_scope(self) -> str:
+        return "extractor.dataplex_metadata"
 
 
-# Example of wiring into a DefaultJob:
-#
-# from databuilder.task.task import DefaultTask
-# from databuilder.job.job import DefaultJob
-#
-# loader = Loader()  # your existing loader
-# job = DefaultJob(
-#     conf=None,
-#     task=DefaultTask(
-#         extractor=DataplexMetadataExtractor(
-#             project_id=PROJECT_ID,
-#             location=LOCATION,
-#             credentials=CREDENTIALS,
-#         ),
-#         loader=loader,
-#     )
-# )
-# job.launch()
+class DataplexPublisher(Publisher):
+    """
+    Publish TableMetadata back into Cloud Data Catalog:
+      - ensures an EntryGroup per dataset
+      - upserts a TABLE‑typed Entry with schema
+    """
+
+    def init(self, conf: ConfigTree) -> None:
+        self.dc = datacatalog_v1.DataCatalogClient()
+        self.location = conf.get_string("gcp_location", "us-central1")
+        self.project = conf.get_string("project_id")
+
+    def publish(self, records: Iterator[TableMetadata]) -> None:
+        parent = f"projects/{self.project}/locations/{self.location}"
+        for tbl in records:
+            eg_id = tbl.database
+            eg_name = f"{parent}/entryGroups/{eg_id}"
+            try:
+                self.dc.get_entry_group(name=eg_name)
+            except Exception:
+                self.dc.create_entry_group(
+                    parent=parent,
+                    entry_group_id=eg_id,
+                    entry_group={"display_name": eg_id},
+                )
+
+            entry_id = tbl.name
+            entry = datacatalog_v1.Entry(
+                display_name=tbl.name,
+                type_=datacatalog_v1.EntryType.TABLE,
+                schema=datacatalog_v1.Schema(
+                    columns=[
+                        datacatalog_v1.ColumnSchema(
+                            column=col.name,
+                            type_=col.col_type or "",
+                            description=col.description or "",
+                        )
+                        for col in tbl.columns
+                    ]
+                ),
+            )
+            try:
+                existing = self.dc.get_entry(name=f"{eg_name}/entries/{entry_id}")
+                self.dc.update_entry(entry=entry)
+            except Exception:
+                self.dc.create_entry(
+                    parent=eg_name,
+                    entry_id=entry_id,
+                    entry=entry,
+                )
+
+
+def crawl_with_dataplex(conf: ConfigTree) -> None:
+    """
+    Convenience: run the extractor → loader → publisher pipeline end‑to‑end.
+    """
+    extractor = DataplexMetadataExtractor()
+    extractor.init(conf)
+
+    loader = Loader()
+    task = DefaultTask(extractor=extractor, loader=loader)
+
+    publisher = DataplexPublisher()
+    publisher.init(conf)
+
+    job = DefaultJob(conf=conf, task=task, publisher=publisher)
+    job.launch()
