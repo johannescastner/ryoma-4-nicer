@@ -5,7 +5,7 @@ from typing import Iterator, Union
 from databuilder.loader.base_loader import Loader
 from pyhocon import ConfigTree
 
-from ryoma_ai.datasource.dataplex import DataplexMetadataExtractor, DataplexPublisher
+from ryoma_ai.datasource.dataplex import DataplexPublisher
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.INFO)
