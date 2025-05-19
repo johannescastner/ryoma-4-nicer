@@ -1,4 +1,3 @@
-python
 import logging
 from typing import Optional, Type, Any
 
