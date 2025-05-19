@@ -18,10 +18,8 @@ class DataplexLoader(Loader):
     def init(self, conf: ConfigTree) -> None:
 
         # Initialize the publisher (expects project_id + credentials in conf)
-        self.publisher = DataplexPublisher(
-            project_id=conf.get_string("project_id"),
-            credentials=conf.get("credentials", None),
-        )
+        self.publisher = DataplexPublisher()
+        self.publisher.init(conf)
         # If your publisher has a prepare or setup step:
         if hasattr(self.publisher, "prepare"):
             self.publisher.prepare()
