@@ -129,7 +129,7 @@ class DataplexPublisher(Publisher):
             )
 
             try:
-                self.catalog.get_entry(name=f"{eg_name}/entries/{tbl.name}")
+                entry.name = f"{eg_name}/entries/{tbl.name}"
                 self.catalog.update_entry(entry=entry)
             except Exception:
                 self.catalog.create_entry(parent=eg_name, entry=entry, entry_id=tbl.name)
