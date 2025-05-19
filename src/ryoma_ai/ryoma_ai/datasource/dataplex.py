@@ -10,8 +10,10 @@ from databuilder.task.task import DefaultTask
 from databuilder.job.job import DefaultJob
 from databuilder.models.table_metadata import ColumnMetadata, TableMetadata
 from databuilder.publisher.base_publisher import Publisher
+from ryoma_ai.datasource.dataplex_loader import DataplexLoader
 
 from google.cloud import dataplex_v1
+from google.protobuf import struct_pb2
 
 LOGGER = logging.getLogger(__name__)
 LOGGER.setLevel(logging.INFO)
@@ -81,8 +83,8 @@ class DataplexPublisher(Publisher):
     """
 
     def init(self, conf: ConfigTree) -> None:
-        self.dc = datacatalog_v1.DataCatalogClient()
-        self.location = conf.get_string("gcp_location", "us-central1")
+        self.catalog = dataplex_v1.CatalogServiceClient()
+        self.location = conf.get_string("gcp_location", "eu")
         self.project = conf.get_string("project_id")
 
     def publish(self, records: Iterator[TableMetadata]) -> None:
@@ -96,33 +98,42 @@ class DataplexPublisher(Publisher):
                 self.dc.create_entry_group(
                     parent=parent,
                     entry_group_id=eg_id,
-                    entry_group={"display_name": eg_id},
+                    entry_group=dataplex_v1.EntryGroup(display_name=eg_id),
                 )
 
-            entry_id = tbl.name
-            entry = datacatalog_v1.Entry(
-                display_name=tbl.name,
-                type_=datacatalog_v1.EntryType.TABLE,
-                schema=datacatalog_v1.Schema(
-                    columns=[
-                        datacatalog_v1.ColumnSchema(
-                            column=col.name,
-                            type_=col.col_type or "",
-                            description=col.description or "",
-                        )
-                        for col in tbl.columns
-                    ]
-                ),
+            # Build schema aspect
+            schema_struct = struct_pb2.Struct(
+                fields={
+                    "columns": struct_pb2.Value(
+                        list_value=struct_pb2.ListValue(values=[
+                            struct_pb2.Value(struct_value=struct_pb2.Struct(
+                                fields={
+                                    "name": struct_pb2.Value(string_value=c.name),
+                                    "type": struct_pb2.Value(string_value=c.col_type or ""),
+                                    "description": struct_pb2.Value(string_value=c.description or ""),
+                                }
+                            )) for c in tbl.columns
+                        ])
+                    )
+                }
             )
+
+            entry = dataplex_v1.Entry(
+                entry_type="projects/dataplex-types/locations/global/entryTypes/generic",
+                entry_source=dataplex_v1.EntrySource(description=tbl.description[:250]),
+                aspects={
+                    "dataplex-types.global.generic": dataplex_v1.Aspect(
+                        aspect_type="projects/dataplex-types/locations/global/aspectTypes/generic",
+                        data=schema_struct
+                    )
+                },
+            )
+
             try:
-                existing = self.dc.get_entry(name=f"{eg_name}/entries/{entry_id}")
-                self.dc.update_entry(entry=entry)
+                self.catalog.get_entry(name=f"{eg_name}/entries/{tbl.name}")
+                self.catalog.update_entry(entry=entry)
             except Exception:
-                self.dc.create_entry(
-                    parent=eg_name,
-                    entry_id=entry_id,
-                    entry=entry,
-                )
+                self.catalog.create_entry(parent=eg_name, entry=entry, entry_id=tbl.name)
 
 
 def crawl_with_dataplex(conf: ConfigTree) -> None:
@@ -132,11 +143,14 @@ def crawl_with_dataplex(conf: ConfigTree) -> None:
     extractor = DataplexMetadataExtractor()
     extractor.init(conf)
 
-    loader = Loader()
-    task = DefaultTask(extractor=extractor, loader=loader)
+    loader = DataplexLoader()          # <-- concrete subclass
+    loader.init(conf)                  # <-- initialise it once
 
     publisher = DataplexPublisher()
     publisher.init(conf)
-
+    task = DefaultTask(extractor=extractor, loader=loader)
+    publisher = DataplexPublisher()
+    publisher.init(conf)    
+    
     job = DefaultJob(conf=conf, task=task, publisher=publisher)
     job.launch()
