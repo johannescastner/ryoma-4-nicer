@@ -90,7 +90,7 @@ class DataplexPublisher(Publisher):
         self.location = conf.get_string("gcp_location", "eu-west1")
         self.project = conf.get_string("project_id")
 
-    def publish(self, records: Iterator[TableMetadata]) -> None:
+    def publish_impl(self, records: Iterator[TableMetadata]) -> None:
         parent = f"projects/{self.project}/locations/{self.location}"
         for tbl in records:
             eg_id = tbl.database
