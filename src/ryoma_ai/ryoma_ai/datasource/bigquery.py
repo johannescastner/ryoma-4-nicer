@@ -57,7 +57,7 @@ class BigQueryDataSource(SqlDataSource):
         if self.dataset_id:
             connect_args["dataset_id"] = self.dataset_id
         if self.credentials:                                        # <- renamed
-            connect_args["auth_credentials"] = self.credentials
+            connect_args["credentials"] = self.credentials
 
         logging.info("Connecting to BigQuery with %r", connect_args)
         self._backend = ibis.bigquery.connect(**connect_args)
