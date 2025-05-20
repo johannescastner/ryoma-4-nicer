@@ -32,17 +32,25 @@ class DataplexMetadataExtractor(Extractor):
 
     def init(self, conf: ConfigTree) -> None:
         project = conf.get_string("project_id")
+        # pick up explicit credentials if provided, else fallback to ADC
+        creds = conf.get("credentials", None)
         # Dataplex Content API for listing assets
-        self.content_client = dataplex_v1.ContentServiceClient()
+        self.content_client = dataplex_v1.ContentServiceClient(
+            credentials=creds
+        )
         # Parent path covers all locations: projects/{project}/locations/-
         self.parent = f"projects/{project}/locations/-"
         self._iter = self._iterate_tables()
 
     def _iterate_tables(self) -> Iterator[TableMetadata]:
         # Directly iterate over the paged responses
-        for lake in dataplex_v1.LakesClient().list_lakes(parent=self.parent):
-            for zone in dataplex_v1.ZonesClient().list_zones(parent=lake.name):
-                for asset in dataplex_v1.AssetsClient().list_assets(parent=zone.name):
+        creds = getattr(self.content_client, "_transport", None) and creds or None
+        lakes_client = dataplex_v1.LakesClient(credentials=creds)
+        for lake in lakes_client.list_lakes(parent=self.parent):
+            zones_client = dataplex_v1.ZonesClient(credentials=creds)
+            for zone in zones_client.list_zones(parent=lake.name):
+                assets_client = dataplex_v1.AssetsClient(credentials=creds)
+                for asset assets_client.list_assets(parent=zone.name):
                     typ = asset.resource_spec.type_
                     if typ not in ("TABLE", "STREAM"):
                         continue
