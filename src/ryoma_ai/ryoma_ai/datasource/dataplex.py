@@ -86,7 +86,12 @@ class DataplexPublisher(Publisher):
     """
 
     def init(self, conf: ConfigTree) -> None:
-        self.catalog = dataplex_v1.CatalogServiceClient()
+        # pick up explicit credentials if provided, else fallback to ADC
+        creds = conf.get("credentials", None)
+        if creds:
+            self.catalog = dataplex_v1.CatalogServiceClient(credentials=creds)
+        else:
+            self.catalog = dataplex_v1.CatalogServiceClient()
         self.location = conf.get_string("gcp_location", "eu-west1")
         self.project = conf.get_string("project_id")
 
