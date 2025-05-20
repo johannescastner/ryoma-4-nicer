@@ -38,15 +38,38 @@ class BigQueryDataSource(SqlDataSource):
         self._extractor_cls = metadata_extractor_cls
         self._publisher_cls = metadata_publisher_cls
 
+    # ------------------------------------------------------------------
+    # PRIVATE – single, cached BigQuery connection
+    # ------------------------------------------------------------------
     def _connect(self, **kwargs) -> BaseBackend:
-        connect_args: dict[str, Any] = {"project_id": self.project_id, **kwargs}
+        """
+        Build (or reuse) the Ibis BigQuery backend.
+
+        *   Ibis ≥5.0 expects the service-account object under the keyword
+            **auth_credentials** – passing “credentials” is silently ignored and
+            you end up with a None backend.
+        *   We cache the backend so repeated queries don’t re-authenticate.
+        """
+        if hasattr(self, "_backend") and self._backend is not None:
+            return self._backend                                   # reuse handle
+
+        connect_args: dict[str, Any] = {"project_id": self.project_id}
         if self.dataset_id:
             connect_args["dataset_id"] = self.dataset_id
-        if self.credentials:
-            connect_args["credentials"] = self.credentials
+        if self.credentials:                                        # <- renamed
+            connect_args["auth_credentials"] = self.credentials
 
         logging.info("Connecting to BigQuery with %r", connect_args)
-        return ibis.bigquery.connect(**connect_args)
+        self._backend = ibis.bigquery.connect(**connect_args)
+        return self._backend
+    # ------------------------------------------------------------------
+    # PUBLIC – thin helper the SqlAgent uses to run SQL
+    # ------------------------------------------------------------------
+    def query(self, sql: str):  # -> pandas.DataFrame
+        """
+        Execute *sql* immediately and return the result as a DataFrame.
+        """
+        return self._connect().raw_sql(sql).fetch()
 
     def crawl_catalogs(self, loader: Loader, where_clause_suffix: Optional[str] = ""):
         """
