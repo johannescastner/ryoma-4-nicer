@@ -89,24 +89,21 @@ class DataplexPublisher(Publisher):
 
     def init(self, conf: ConfigTree) -> None:
         # pick up explicit credentials if provided, else fallback to ADC
-        self.creds = conf.get("credentials", None)
-        if self.creds:
-            self.catalog = dataplex_v1.CatalogServiceClient(credentials=self.creds)
+        creds = conf.get("credentials", None)
+        if creds:
+            self.catalog = dataplex_v1.CatalogServiceClient(credentials=creds)
         else:
             self.catalog = dataplex_v1.CatalogServiceClient()
         self.location = conf.get_string("gcp_location", "eu-west1")
         self.project = conf.get_string("project_id")
-        
+
     def get_scope(self) -> str:
         return "publisher.dataplex_metadata"
-        
-    def publish_impl(self) -> None:
+
+    def publish_impl(self, records: Iterator[TableMetadata]) -> None:
         """
-        Abstract hook — must exist, but we do _all_ our work in `publish()`.
+        Core publish logic. Receives the iterator of TableMetadata.
         """
-        return
-        
-    def publish(self, records: Iterator[TableMetadata]) -> None:
         parent = f"projects/{self.project}/locations/{self.location}"
         for tbl in records:
             eg_id = tbl.database
@@ -152,7 +149,10 @@ class DataplexPublisher(Publisher):
                 entry.name = f"{eg_name}/entries/{tbl.name}"
                 self.catalog.update_entry(entry=entry)
             except Exception:
-                self.catalog.create_entry(parent=eg_name, entry=entry, entry_id=tbl.name)
+                self.catalog.create_entry(
+                    parent=eg_name, entry=entry, entry_id=tbl.name
+                )
+
 
 
 def crawl_with_dataplex(conf: ConfigTree) -> None:
