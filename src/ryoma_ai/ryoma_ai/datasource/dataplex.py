@@ -35,7 +35,7 @@ class DataplexMetadataExtractor(Extractor):
         # pick up explicit credentials if provided, else fallback to ADC
         self.creds = conf.get("credentials", None)
         # Dataplex Content API for listing assets
-        self.client = dataplex_v1.DataplexServiceClient(
+        self.client = dataplex_v1.ContentServiceClient(
             credentials=self.creds
         )
         # Parent path covers all locations: projects/{project}/locations/-
@@ -99,8 +99,14 @@ class DataplexPublisher(Publisher):
         
     def get_scope(self) -> str:
         return "publisher.dataplex_metadata"
-    
-    def publish_impl(self, records: Iterator[TableMetadata]) -> None:
+        
+    def publish_impl(self) -> None:
+        """
+        Abstract hook — must exist, but we do _all_ our work in `publish()`.
+        """
+        return
+        
+    def publish(self, records: Iterator[TableMetadata]) -> None:
         parent = f"projects/{self.project}/locations/{self.location}"
         for tbl in records:
             eg_id = tbl.database
