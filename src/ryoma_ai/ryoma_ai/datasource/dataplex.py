@@ -35,7 +35,7 @@ class DataplexMetadataExtractor(Extractor):
         # pick up explicit credentials if provided, else fallback to ADC
         self.creds = conf.get("credentials", None)
         # Dataplex Content API for listing assets
-        self.content_client = dataplex_v1.ContentServiceClient(
+        self.client = dataplex_v1.ContentServiceClient(
             credentials=self.creds
         )
         # Parent path covers all locations: projects/{project}/locations/-
