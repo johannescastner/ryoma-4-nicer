@@ -44,7 +44,6 @@ class DataplexMetadataExtractor(Extractor):
 
     def _iterate_tables(self) -> Iterator[TableMetadata]:
         # Directly iterate over the paged responses
-        creds = getattr(self.content_client, "_transport", None) and creds or None
         lakes_client = dataplex_v1.LakesClient(credentials=self.creds)
         for lake in lakes_client.list_lakes(parent=self.parent):
             zones_client = dataplex_v1.ZonesClient(credentials=self.creds)
