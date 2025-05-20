@@ -9,7 +9,7 @@ from databuilder.task.task import DefaultTask
 from databuilder.job.job import DefaultJob
 from databuilder.models.table_metadata import ColumnMetadata, TableMetadata
 from databuilder.publisher.base_publisher import Publisher
-from ryoma_ai.datasource.dataplex_loader import DataplexLoader
+
 
 from google.cloud import dataplex_v1
 from google.protobuf import struct_pb2
@@ -145,7 +145,7 @@ def crawl_with_dataplex(conf: ConfigTree) -> None:
     """
     extractor = DataplexMetadataExtractor()
     extractor.init(conf)
-
+    from ryoma_ai.datasource.dataplex_loader import DataplexLoader    # defer import to break the cycle    
     loader = DataplexLoader()          # <-- concrete subclass
     loader.init(conf)                  # <-- initialise it once
 
