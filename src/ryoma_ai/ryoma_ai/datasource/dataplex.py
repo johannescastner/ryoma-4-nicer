@@ -43,18 +43,13 @@ class DataplexMetadataExtractor(Extractor):
         self._iter = self._iterate_tables()
 
     def _iterate_tables(self) -> Iterator[TableMetadata]:
-        # Directly iterate over the paged responses
-        lakes_client = dataplex_v1.LakesClient(credentials=self.creds)
-        for lake in lakes_client.list_lakes(parent=self.parent):
-            zones_client = dataplex_v1.ZonesClient(credentials=self.creds)
-            for zone in zones_client.list_zones(parent=lake.name):
-                assets_client = dataplex_v1.AssetsClient(credentials=self.creds)
-                for asset in assets_client.list_assets(parent=zone.name):
-                    typ = asset.resource_spec.type_
-                    if typ not in ("TABLE", "STREAM"):
+        # use a single service client to walk through lakes → zones → assets
+        for lake in self.client.list_lakes(request={"parent": self.parent}):
+            for zone in self.client.list_zones(request={"parent": lake.name}):
+                for asset in self.client.list_assets(request={"parent": zone.name}):
+                    if asset.resource_spec.type_ not in ("TABLE", "STREAM"):
                         continue
 
-                    schema = asset.resource_spec.schema
                     cols = [
                         ColumnMetadata(
                             name=field.name,
@@ -62,17 +57,17 @@ class DataplexMetadataExtractor(Extractor):
                             description=field.description or "",
                             sort_order=i,
                         )
-                        for i, field in enumerate(schema.fields)
+                        for i, field in enumerate(asset.resource_spec.schema.fields)
                     ]
 
                     yield TableMetadata(
-                        database=zone.name.split("/")[-1],
-                        cluster=lake.name.split("/")[-1],
-                        schema=zone.name.split("/")[-1],
-                        name=asset.resource_spec.name,
+                        database   = zone.name.split("/")[-1],
+                        cluster    = lake.name.split("/")[-1],
+                        schema     = zone.name.split("/")[-1],
+                        name       = asset.resource_spec.name,
                         description=asset.description or "",
-                        columns=cols,
-                        is_view=False,
+                        columns    = cols,
+                        is_view    = False,
                     )
 
     def extract(self) -> Any:
