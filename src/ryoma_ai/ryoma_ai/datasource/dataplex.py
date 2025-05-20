@@ -88,70 +88,75 @@ class DataplexPublisher(Publisher):
     """
 
     def init(self, conf: ConfigTree) -> None:
-        # pick up explicit credentials if provided, else fallback to ADC
-        creds = conf.get("credentials", None)
-        if creds:
-            self.catalog = dataplex_v1.CatalogServiceClient(credentials=creds)
+        self.creds = conf.get("credentials", None)
+        if self.creds:
+            self.catalog = dataplex_v1.CatalogServiceClient(credentials=self.creds)
         else:
             self.catalog = dataplex_v1.CatalogServiceClient()
         self.location = conf.get_string("gcp_location", "eu-west1")
         self.project = conf.get_string("project_id")
+        self.logger = LOGGER
 
     def get_scope(self) -> str:
         return "publisher.dataplex_metadata"
 
     def publish_impl(self, records: Iterator[TableMetadata]) -> None:
-        """
-        Core publish logic. Receives the iterator of TableMetadata.
-        """
         parent = f"projects/{self.project}/locations/{self.location}"
         for tbl in records:
-            eg_id = tbl.database
-            eg_name = f"{parent}/entryGroups/{eg_id}"
             try:
-                self.catalog.get_entry_group(name=eg_name)
-            except Exception:
-                self.catalog.create_entry_group(
-                    parent=parent,
-                    entry_group_id=eg_id,
-                    entry_group=dataplex_v1.EntryGroup(display_name=eg_id),
+                eg_id = tbl.database
+                eg_name = f"{parent}/entryGroups/{eg_id}"
+                # ensure entry group exists
+                try:
+                    self.catalog.get_entry_group(name=eg_name)
+                except Exception:
+                    self.catalog.create_entry_group(
+                        parent=parent,
+                        entry_group_id=eg_id,
+                        entry_group=dataplex_v1.EntryGroup(display_name=eg_id),
+                    )
+
+                # build schema aspect
+                schema_struct = struct_pb2.Struct(
+                    fields={
+                        "columns": struct_pb2.Value(
+                            list_value=struct_pb2.ListValue(values=[
+                                struct_pb2.Value(struct_value=struct_pb2.Struct(
+                                    fields={
+                                        "name": struct_pb2.Value(string_value=c.name),
+                                        "type": struct_pb2.Value(string_value=c.col_type or ""),
+                                        "description": struct_pb2.Value(string_value=c.description or ""),
+                                    }
+                                )) for c in tbl.columns
+                            ])
+                        )
+                    }
                 )
-
-            # Build schema aspect
-            schema_struct = struct_pb2.Struct(
-                fields={
-                    "columns": struct_pb2.Value(
-                        list_value=struct_pb2.ListValue(values=[
-                            struct_pb2.Value(struct_value=struct_pb2.Struct(
-                                fields={
-                                    "name": struct_pb2.Value(string_value=c.name),
-                                    "type": struct_pb2.Value(string_value=c.col_type or ""),
-                                    "description": struct_pb2.Value(string_value=c.description or ""),
-                                }
-                            )) for c in tbl.columns
-                        ])
-                    )
-                }
-            )
-
-            entry = dataplex_v1.Entry(
-                entry_type=ENTRY_TYPE,
-                entry_source=dataplex_v1.EntrySource(description=tbl.description[:250]),
-                aspects={
-                    ASPECT_TYPE: dataplex_v1.Aspect(
-                        aspect_type=ASPECT_TYPE,
-                        data=schema_struct
-                    )
-                },
-            )
-
-            try:
+                entry = dataplex_v1.Entry(
+                    entry_type=ENTRY_TYPE,
+                    entry_source=dataplex_v1.EntrySource(description=tbl.description[:250]),
+                    aspects={
+                        ASPECT_TYPE: dataplex_v1.Aspect(
+                            aspect_type=ASPECT_TYPE,
+                            data=schema_struct,
+                        )
+                    },
+                )
                 entry.name = f"{eg_name}/entries/{tbl.name}"
-                self.catalog.update_entry(entry=entry)
-            except Exception:
-                self.catalog.create_entry(
-                    parent=eg_name, entry=entry, entry_id=tbl.name
+                # upsert entry
+                try:
+                    self.catalog.update_entry(entry=entry)
+                except Exception:
+                    self.catalog.create_entry(
+                        parent=eg_name,
+                        entry=entry,
+                        entry_id=tbl.name,
+                    )
+            except Exception as e:
+                self.logger.error(
+                    "Error publishing table %s: %s", tbl.name, e, exc_info=True
                 )
+
 
 
 
