@@ -33,10 +33,10 @@ class DataplexMetadataExtractor(Extractor):
     def init(self, conf: ConfigTree) -> None:
         project = conf.get_string("project_id")
         # pick up explicit credentials if provided, else fallback to ADC
-        creds = conf.get("credentials", None)
+        self.creds = conf.get("credentials", None)
         # Dataplex Content API for listing assets
         self.content_client = dataplex_v1.ContentServiceClient(
-            credentials=creds
+            credentials=self.creds
         )
         # Parent path covers all locations: projects/{project}/locations/-
         self.parent = f"projects/{project}/locations/-"
@@ -45,11 +45,11 @@ class DataplexMetadataExtractor(Extractor):
     def _iterate_tables(self) -> Iterator[TableMetadata]:
         # Directly iterate over the paged responses
         creds = getattr(self.content_client, "_transport", None) and creds or None
-        lakes_client = dataplex_v1.LakesClient(credentials=creds)
+        lakes_client = dataplex_v1.LakesClient(credentials=self.creds)
         for lake in lakes_client.list_lakes(parent=self.parent):
-            zones_client = dataplex_v1.ZonesClient(credentials=creds)
+            zones_client = dataplex_v1.ZonesClient(credentials=self.creds)
             for zone in zones_client.list_zones(parent=lake.name):
-                assets_client = dataplex_v1.AssetsClient(credentials=creds)
+                assets_client = dataplex_v1.AssetsClient(credentials=self.creds)
                 for asset in assets_client.list_assets(parent=zone.name):
                     typ = asset.resource_spec.type_
                     if typ not in ("TABLE", "STREAM"):
@@ -95,9 +95,9 @@ class DataplexPublisher(Publisher):
 
     def init(self, conf: ConfigTree) -> None:
         # pick up explicit credentials if provided, else fallback to ADC
-        creds = conf.get("credentials", None)
+        self.creds = conf.get("credentials", None)
         if creds:
-            self.catalog = dataplex_v1.CatalogServiceClient(credentials=creds)
+            self.catalog = dataplex_v1.CatalogServiceClient(credentials=self.creds)
         else:
             self.catalog = dataplex_v1.CatalogServiceClient()
         self.location = conf.get_string("gcp_location", "eu-west1")
