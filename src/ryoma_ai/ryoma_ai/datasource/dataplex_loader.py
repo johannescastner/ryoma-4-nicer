@@ -23,6 +23,9 @@ class DataplexLoader(Loader):
         # If your publisher has a prepare or setup step:
         if hasattr(self.publisher, "prepare"):
             self.publisher.prepare()
+            
+    def get_scope(self) -> str:
+        return "publisher.dataplex_metadata"
 
     def load(self, record: Union[Iterator, object]) -> None:
         # `record` may be a single TableMetadata or an iterator of them
