@@ -96,7 +96,7 @@ class DataplexPublisher(Publisher):
     def init(self, conf: ConfigTree) -> None:
         # pick up explicit credentials if provided, else fallback to ADC
         self.creds = conf.get("credentials", None)
-        if creds:
+        if self.creds:
             self.catalog = dataplex_v1.CatalogServiceClient(credentials=self.creds)
         else:
             self.catalog = dataplex_v1.CatalogServiceClient()
