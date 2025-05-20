@@ -50,7 +50,7 @@ class DataplexMetadataExtractor(Extractor):
             zones_client = dataplex_v1.ZonesClient(credentials=creds)
             for zone in zones_client.list_zones(parent=lake.name):
                 assets_client = dataplex_v1.AssetsClient(credentials=creds)
-                for asset assets_client.list_assets(parent=zone.name):
+                for asset in assets_client.list_assets(parent=zone.name):
                     typ = asset.resource_spec.type_
                     if typ not in ("TABLE", "STREAM"):
                         continue
