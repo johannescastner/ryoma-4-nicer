@@ -153,7 +153,6 @@ class DataplexPublisher(Publisher):
                 self.catalog.update_entry(entry=entry)
             except Exception:
                 self.catalog.create_entry(parent=eg_name, entry=entry, entry_id=tbl.name)
-    
 
 
 def crawl_with_dataplex(conf: ConfigTree) -> None:
