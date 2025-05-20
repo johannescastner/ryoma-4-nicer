@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ryoma-nicer"
-version = "0.2.1"
+version = "0.2.2"
 description = "a clone from the root project for Ryoma AI Platform – made compatible with Pydantic v2"
 license = {file = "LICENSE"}
 readme = "README.md"
@@ -25,6 +25,12 @@ dependencies = [
     "pytest-cov>=5.0.0",
     "openai-responses>=0.10.0",
     "coverage-badge>=1.1.2",
+]
+
+[project.optional-dependencies]
+bigquery = [
+  "google-cloud-bigquery>=3.33.0",
+  "gcsfs>=2025.3.2",
 ]
 
 [tool.hatch.build.targets.wheel]
