@@ -102,7 +102,10 @@ class DataplexPublisher(Publisher):
             self.catalog = dataplex_v1.CatalogServiceClient()
         self.location = conf.get_string("gcp_location", "eu-west1")
         self.project = conf.get_string("project_id")
-
+        
+    def get_scope(self) -> str:
+        return "publisher.dataplex_metadata"
+    
     def publish_impl(self, records: Iterator[TableMetadata]) -> None:
         parent = f"projects/{self.project}/locations/{self.location}"
         for tbl in records:
@@ -150,6 +153,7 @@ class DataplexPublisher(Publisher):
                 self.catalog.update_entry(entry=entry)
             except Exception:
                 self.catalog.create_entry(parent=eg_name, entry=entry, entry_id=tbl.name)
+    
 
 
 def crawl_with_dataplex(conf: ConfigTree) -> None:
