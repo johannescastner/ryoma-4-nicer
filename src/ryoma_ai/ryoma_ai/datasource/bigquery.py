@@ -38,7 +38,7 @@ class BigQueryDataSource(SqlDataSource):
         # Pluggable extractor & publisher
         self._extractor_cls = metadata_extractor_cls
         self._publisher_cls = metadata_publisher_cls
-        self.dataplex_metadata_lookup = self._build_metadata_lookup()
+        self.dataplex_metadata_lookup = self._build_metadata_lookup() if metadata else {}
         
     # ------------------------------------------------------------------
     # PRIVATE – single, cached BigQuery connection
