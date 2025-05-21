@@ -11,7 +11,7 @@ from databuilder.models.table_metadata import ColumnMetadata, TableMetadata
 from databuilder.publisher.base_publisher import Publisher
 
 
-from google.cloud import dataplex_v1
+from google.cloud import dataplex_v1, bigquery
 from google.protobuf import struct_pb2
 
 #–– magic identifiers for the “generic” table entry and aspect in Dataplex Catalog:
@@ -43,32 +43,40 @@ class DataplexMetadataExtractor(Extractor):
         self._iter = self._iterate_tables()
 
     def _iterate_tables(self) -> Iterator[TableMetadata]:
-        # use a single service client to walk through lakes → zones → assets
+        bq_client = bigquery.Client(project=self.project, credentials=self.creds)
         for lake in self.client.list_lakes(request={"parent": self.parent}):
             for zone in self.client.list_zones(request={"parent": lake.name}):
                 for asset in self.client.list_assets(request={"parent": zone.name}):
-                    if asset.resource_spec.type_ not in ("TABLE", "STREAM"):
+                    if asset.resource_spec.type_ != "BIGQUERY_DATASET":
                         continue
 
-                    cols = [
-                        ColumnMetadata(
-                            name=field.name,
-                            col_type=field.type_,
-                            description=field.description or "",
-                            sort_order=i,
-                        )
-                        for i, field in enumerate(asset.resource_spec.schema.fields)
-                    ]
+                    dataset_ref = asset.resource_spec.name  # Format: projects/{project_id}/datasets/{dataset_id}
+                    project_id, dataset_id = dataset_ref.split("/")[1], dataset_ref.split("/")[3]
+                    dataset = bq_client.get_dataset(f"{project_id}.{dataset_id}")
+                    tables = bq_client.list_tables(dataset)
 
-                    yield TableMetadata(
-                        database   = zone.name.split("/")[-1],
-                        cluster    = lake.name.split("/")[-1],
-                        schema     = zone.name.split("/")[-1],
-                        name       = asset.resource_spec.name,
-                        description=asset.description or "",
-                        columns    = cols,
-                        is_view    = False,
-                    )
+                    for table in tables:
+                        table_ref = f"{project_id}.{dataset_id}.{table.table_id}"
+                        table_obj = bq_client.get_table(table_ref)
+                        cols = [
+                            ColumnMetadata(
+                                name=field.name,
+                                col_type=field.field_type,
+                                description=field.description or "",
+                                sort_order=i,
+                            )
+                            for i, field in enumerate(table_obj.schema)
+                        ]
+
+                        yield TableMetadata(
+                            database=dataset_id,
+                            cluster=lake.name.split("/")[-1],
+                            schema=dataset_id,
+                            name=table_ref,
+                            description=table_obj.description or "",
+                            columns=cols,
+                            is_view=table_obj.table_type == "VIEW",
+                        )
 
     def extract(self) -> Any:
         try:
