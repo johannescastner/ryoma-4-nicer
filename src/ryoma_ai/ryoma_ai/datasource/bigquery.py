@@ -20,6 +20,7 @@ class BigQueryDataSource(SqlDataSource):
         project_id: str,
         dataset_id: Optional[str] = None,
         credentials: Optional[Any] = None,
+        metadata: Optional[Any] = None,
         *,
         metadata_extractor_cls: Type = DataplexMetadataExtractor,
         metadata_publisher_cls: Type = DataplexPublisher,
@@ -75,25 +76,11 @@ class BigQueryDataSource(SqlDataSource):
         self._backend = backend
         return self
 
-    def _build_metadata_lookup(self) -> dict[str, str]:
-        """
-        Build a lookup from table name to fully qualified table name using Dataplex metadata.
-        """
+    def _build_metadata_lookup(self, metadata):
         lookup = {}
-        extractor = self._extractor_cls(
-            project_id=self.project_id,
-            credentials=self.credentials,
-        )
-        extractor.init(ConfigFactory.from_dict({
-            "project_id": self.project_id,
-            "credentials": self.credentials,
-        }))
-        while True:
-            table_metadata = extractor.extract()
-            if table_metadata is None:
-                break
-            fq_name = f"{self.project_id}.{table_metadata.schema}.{table_metadata.name}"
-            lookup[table_metadata.name] = fq_name
+        for table in metadata:
+            fq_name = f"{self.project_id}.{table.schema}.{table.name}"
+            lookup[table.name] = fq_name
         return lookup
     # ------------------------------------------------------------------
     # PUBLIC – thin helper the SqlAgent uses to run SQL
@@ -107,33 +94,13 @@ class BigQueryDataSource(SqlDataSource):
 # ------------------------------------------------------------
     # PRIVATE helper – make every table fully-qualified
     # ------------------------------------------------------------
-    def _qualify(self, table_name: str) -> str:
-        """
-        Ensure *table_name* is `project.dataset.table` and quoted.
-        """
-        bare = table_name.replace("`", "")
-        parts = bare.split(".")
-
-        if len(parts) == 3:
-            fq = bare
-        elif len(parts) == 2:
-            fq = f"{self.project_id}.{bare}"
-        elif len(parts) == 1:
-            if self.dataset_id:
-                fq = f"{self.project_id}.{self.dataset_id}.{bare}"
-            elif bare in self.dataplex_metadata_lookup:
-                fq = self.dataplex_metadata_lookup[bare]
-            else:
-                raise ValueError(
-                    f"Cannot qualify bare table '{table_name}' because "
-                    "this DataSource was instantiated without a default "
-                    "`dataset_id`, and the table was not found in Dataplex metadata."
-                )
+    def _qualify(self, table_name):
+        if table_name in self.metadata_lookup:
+            return f"`{self.metadata_lookup[table_name]}`"
+        elif self.dataset_id:
+            return f"`{self.project_id}.{self.dataset_id}.{table_name}`"
         else:
-            raise ValueError(f"Unrecognized table identifier: {table_name}")
-
-        return f"`{fq}`"
-
+            raise ValueError(f"Cannot qualify table '{table_name}' without dataset_id or metadata.")
     # ------------------------------------------------------------
     # PUBLIC – used by SqlQueryTool() under the hood
     # ------------------------------------------------------------
