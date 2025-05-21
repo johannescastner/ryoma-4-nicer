@@ -82,17 +82,50 @@ class BigQueryDataSource(SqlDataSource):
         """
         return self._connect().raw_sql(sql).fetch()
 
-    def get_table_schema(self, table_name: str) -> str:          # NEW/UPDATED
-        # prepend project-id if Dataplex only gave us dataset.table
-        if "." not in table_name.split("`")[-1]:
-            table_name = f"{self.project_id}.{table_name}"
+    def get_table_schema(self, table_name: str) -> str:
+        """
+        Return a human–readable schema for *table_name*.
+
+        ▸ Works whether `table_name` was recorded as
+            • just the bare table              →  events_20250201
+            • dataset.table                    →  analytics_474694268.events_20250201
+            • project.dataset.table            →  datawarehouse-447422.analytics_474694268.events_20250201
+        ▸ Leaves already-quoted identifiers (those that contain ‘`’)
+          untouched except for padding missing components.
+        """
+        # Strip any back-ticks so we can reason about the parts
+        bare = table_name.replace("`", "")
+        parts = bare.split(".")
+
+        if len(parts) == 3:
+            # already project.dataset.table  → nothing to do
+            fq_name = bare
+        elif len(parts) == 2:
+            # missing project               → prepend self.project_id
+            fq_name = f"{self.project_id}.{parts[0]}.{parts[1]}"
+        elif len(parts) == 1:
+            # only table given              → need dataset too
+            if not self.dataset_id:
+                raise ValueError(
+                    f"Table name '{table_name}' is ambiguous (no dataset set on "
+                    "BigQueryDataSource and Dataplex only returned the bare table)."
+                )
+            fq_name = f"{self.project_id}.{self.dataset_id}.{parts[0]}"
+        else:  # just in case something weird slips through
+            raise ValueError(f"Unrecognised table identifier: {table_name}")
+
+        # Re-quote so BigQuery accepts it even if identifiers contain dashes
+        fq_name = f"`{fq_name}`"
+
+        # ────────────────────────────────────────────────────────────────
+        #   Probe the table with LIMIT 0 to fetch only its schema
+        # ────────────────────────────────────────────────────────────────
         return (
             self._connect()
-                .raw_sql(f"SELECT * FROM `{table_name}` LIMIT 0")
+                .raw_sql(f"SELECT * FROM {fq_name} LIMIT 0")
                 .schema()
                 .to_string()
         )
-
 
     def crawl_catalogs(self, loader: Loader, where_clause_suffix: Optional[str] = ""):
         """
