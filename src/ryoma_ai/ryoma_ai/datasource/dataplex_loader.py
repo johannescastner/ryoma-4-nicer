@@ -16,7 +16,8 @@ class DataplexLoader(Loader):
     Dataplex-extracted metadata records back into our runtime store.
     """
     def init(self, conf: ConfigTree) -> None:
-
+        self.conf = conf
+        self.metadata = []
         # Initialize the publisher (expects project_id + credentials in conf)
         self.publisher = DataplexPublisher()
         self.publisher.init(conf)
@@ -34,6 +35,7 @@ class DataplexLoader(Loader):
         else:
             records = record  # already iterable
         # Delegate publishing of metadata objects
+        self.metadata.append(record)
         self.publisher.publish(records)
 
     def close(self) -> None:
@@ -41,3 +43,6 @@ class DataplexLoader(Loader):
         if hasattr(self.publisher, "finish"):
             self.publisher.finish()
 
+    def get_metadata(self) -> List[TableMetadata]:
+        return self.metadata    
+        
