@@ -62,6 +62,17 @@ class BigQueryDataSource(SqlDataSource):
         logging.info("Connecting to BigQuery with %r", connect_args)
         self._backend = ibis.bigquery.connect(**connect_args)
         return self._backend
+        
+        # ------------------------------------------------------------
+    # OPTIONAL – allow callers to provide a ready-made backend
+    # ------------------------------------------------------------
+    def set_backend(self, backend: BaseBackend) -> "BigQueryDataSource":
+        """
+        Inject an already-authenticated Ibis backend (so we don’t reconnect
+        over and over).  Returns *self* so you can chain calls.
+        """
+        self._backend = backend
+        return self
     # ------------------------------------------------------------------
     # PUBLIC – thin helper the SqlAgent uses to run SQL
     # ------------------------------------------------------------------
