@@ -82,50 +82,51 @@ class BigQueryDataSource(SqlDataSource):
         """
         return self._connect().raw_sql(sql).fetch()
 
-    def get_table_schema(self, table_name: str) -> str:
+# ------------------------------------------------------------
+    # PRIVATE helper – make every table fully-qualified
+    # ------------------------------------------------------------
+    def _qualify(self, table_name: str) -> str:
         """
-        Return a human–readable schema for *table_name*.
-
-        ▸ Works whether `table_name` was recorded as
-            • just the bare table              →  events_20250201
-            • dataset.table                    →  analytics_474694268.events_20250201
-            • project.dataset.table            →  datawarehouse-447422.analytics_474694268.events_20250201
-        ▸ Leaves already-quoted identifiers (those that contain ‘`’)
-          untouched except for padding missing components.
+        Ensure *table_name* is `project.dataset.table` and quoted.
+        Works for all three user inputs:
+          ✦   events_20250201
+          ✦   analytics_123.events_20250201
+          ✦   datawarehouse-447422.analytics_123.events_20250201
         """
-        # Strip any back-ticks so we can reason about the parts
-        bare = table_name.replace("`", "")
+        bare = table_name.replace("`", "")          # drop back-ticks
         parts = bare.split(".")
 
-        if len(parts) == 3:
-            # already project.dataset.table  → nothing to do
-            fq_name = bare
-        elif len(parts) == 2:
-            # missing project               → prepend self.project_id
-            fq_name = f"{self.project_id}.{parts[0]}.{parts[1]}"
-        elif len(parts) == 1:
-            # only table given              → need dataset too
+        if len(parts) == 3:                         # already full
+            fq = bare
+        elif len(parts) == 2:                       # missing project
+            fq = f"{self.project_id}.{bare}"
+        elif len(parts) == 1:                       # only table
             if not self.dataset_id:
                 raise ValueError(
-                    f"Table name '{table_name}' is ambiguous (no dataset set on "
-                    "BigQueryDataSource and Dataplex only returned the bare table)."
+                    f"Cannot qualify bare table '{table_name}' because "
+                    "this DataSource was instantiated without a default "
+                    "`dataset_id`.  Pass dataset_id=… or store fully-"
+                    "qualified names in Dataplex."
                 )
-            fq_name = f"{self.project_id}.{self.dataset_id}.{parts[0]}"
-        else:  # just in case something weird slips through
+            fq = f"{self.project_id}.{self.dataset_id}.{bare}"
+        else:
             raise ValueError(f"Unrecognised table identifier: {table_name}")
 
-        # Re-quote so BigQuery accepts it even if identifiers contain dashes
-        fq_name = f"`{fq_name}`"
+        return f"`{fq}`"
 
-        # ────────────────────────────────────────────────────────────────
-        #   Probe the table with LIMIT 0 to fetch only its schema
-        # ────────────────────────────────────────────────────────────────
+    # ------------------------------------------------------------
+    # PUBLIC – used by SqlQueryTool() under the hood
+    # ------------------------------------------------------------
+    @lru_cache(maxsize=1024)       # ask BigQuery only once per table
+    def get_table_schema(self, table_name: str) -> str:
+        fq_name = self._qualify(table_name)
         return (
             self._connect()
                 .raw_sql(f"SELECT * FROM {fq_name} LIMIT 0")
                 .schema()
                 .to_string()
         )
+
 
     def crawl_catalogs(self, loader: Loader, where_clause_suffix: Optional[str] = ""):
         """
