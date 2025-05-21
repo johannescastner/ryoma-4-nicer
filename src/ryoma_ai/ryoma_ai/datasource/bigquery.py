@@ -1,6 +1,6 @@
 import logging
 from typing import Optional, Type, Any
-
+from functools import lru_cache
 import ibis
 from ibis import BaseBackend
 from ryoma_ai.datasource.base import SqlDataSource
