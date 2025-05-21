@@ -31,7 +31,7 @@ class DataplexMetadataExtractor(Extractor):
     """
 
     def init(self, conf: ConfigTree) -> None:
-        project = conf.get_string("project_id")
+        self.project = conf.get_string("project_id")
         # pick up explicit credentials if provided, else fallback to ADC
         self.creds = conf.get("credentials", None)
         # Dataplex Content API for listing assets
