@@ -39,7 +39,7 @@ class DataplexMetadataExtractor(Extractor):
             credentials=self.creds
         )
         # Parent path covers all locations: projects/{project}/locations/-
-        self.parent = f"projects/{project}/locations/-"
+        self.parent = f"projects/{self.project}/locations/-"
         self._iter = self._iterate_tables()
 
     def _iterate_tables(self) -> Iterator[TableMetadata]:
