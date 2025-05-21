@@ -82,6 +82,14 @@ class BigQueryDataSource(SqlDataSource):
         """
         return self._connect().raw_sql(sql).fetch()
 
+    def get_table_schema(self, table_name: str) -> str:          # NEW
+        return (
+            self._connect()
+                .raw_sql(f"SELECT * FROM `{table_name}` LIMIT 0")
+                .schema()
+                .to_string()
+        )
+
     def crawl_catalogs(self, loader: Loader, where_clause_suffix: Optional[str] = ""):
         """
         Dynamically discover all datasets/tables/columns by:
