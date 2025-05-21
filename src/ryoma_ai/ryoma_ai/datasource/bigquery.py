@@ -76,9 +76,9 @@ class BigQueryDataSource(SqlDataSource):
         self._backend = backend
         return self
 
-    def _build_metadata_lookup(self, metadata):
+    def _build_metadata_lookup(self):
         lookup = {}
-        for table in metadata:
+        for table in self.metadata:
             fq_name = f"{self.project_id}.{table.schema}.{table.name}"
             lookup[table.name] = fq_name
         return lookup
