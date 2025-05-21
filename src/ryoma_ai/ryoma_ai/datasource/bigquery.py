@@ -34,7 +34,7 @@ class BigQueryDataSource(SqlDataSource):
         self.project_id = project_id
         self.dataset_id = dataset_id
         self.credentials = credentials
-
+        self.metadata = metadata
         # Pluggable extractor & publisher
         self._extractor_cls = metadata_extractor_cls
         self._publisher_cls = metadata_publisher_cls
