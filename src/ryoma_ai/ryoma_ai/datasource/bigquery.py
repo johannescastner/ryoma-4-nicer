@@ -13,6 +13,7 @@ from databuilder.publisher.neo4j_csv_publisher import Neo4jCsvPublisher
 
 # Our custom Dataplex extractor & publisher
 from ryoma_ai.datasource.dataplex import DataplexMetadataExtractor, DataplexPublisher
+from ryoma_ai.datasource.metadata import Catalog, Table  # ensure these are correct
 
 class BigQueryDataSource(SqlDataSource):
     def __init__(
@@ -75,6 +76,21 @@ class BigQueryDataSource(SqlDataSource):
         """
         self._backend = backend
         return self
+
+    def get_catalog(self, catalog: Optional[str] = None) -> Catalog:
+        return Catalog(
+            catalog_name=self.dataset_id or self.project_id or "default_catalog",
+            schemas=[
+                Schema(
+                    schema_name=table.schema if hasattr(table, 'schema') else 'default_schema',
+                    tables=[Table(
+                        table_name=table.name,
+                        columns=table.columns  # already a list of Column objects
+                    )]
+                )
+                for table in self.metadata or []
+            ]
+        )
 
     def _build_metadata_lookup(self):
         lookup = {}
