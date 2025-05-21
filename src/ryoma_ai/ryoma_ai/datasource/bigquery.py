@@ -82,13 +82,17 @@ class BigQueryDataSource(SqlDataSource):
         """
         return self._connect().raw_sql(sql).fetch()
 
-    def get_table_schema(self, table_name: str) -> str:          # NEW
+    def get_table_schema(self, table_name: str) -> str:          # NEW/UPDATED
+        # prepend project-id if Dataplex only gave us dataset.table
+        if "." not in table_name.split("`")[-1]:
+            table_name = f"{self.project_id}.{table_name}"
         return (
             self._connect()
                 .raw_sql(f"SELECT * FROM `{table_name}` LIMIT 0")
                 .schema()
                 .to_string()
         )
+
 
     def crawl_catalogs(self, loader: Loader, where_clause_suffix: Optional[str] = ""):
         """
