@@ -37,7 +37,7 @@ class BigQueryDataSource(SqlDataSource):
         # Pluggable extractor & publisher
         self._extractor_cls = metadata_extractor_cls
         self._publisher_cls = metadata_publisher_cls
-        self.dataplex_metadata_lookup = {}  # Initialize the metadata lookup dictionary   
+        self.dataplex_metadata_lookup = self._build_metadata_lookup()
         
     # ------------------------------------------------------------------
     # PRIVATE – single, cached BigQuery connection
@@ -74,6 +74,27 @@ class BigQueryDataSource(SqlDataSource):
         """
         self._backend = backend
         return self
+
+    def _build_metadata_lookup(self) -> dict[str, str]:
+        """
+        Build a lookup from table name to fully qualified table name using Dataplex metadata.
+        """
+        lookup = {}
+        extractor = self._extractor_cls(
+            project_id=self.project_id,
+            credentials=self.credentials,
+        )
+        extractor.init(ConfigFactory.from_dict({
+            "project_id": self.project_id,
+            "credentials": self.credentials,
+        }))
+        while True:
+            table_metadata = extractor.extract()
+            if table_metadata is None:
+                break
+            fq_name = f"{self.project_id}.{table_metadata.schema}.{table_metadata.name}"
+            lookup[table_metadata.name] = fq_name
+        return lookup
     # ------------------------------------------------------------------
     # PUBLIC – thin helper the SqlAgent uses to run SQL
     # ------------------------------------------------------------------
@@ -89,29 +110,27 @@ class BigQueryDataSource(SqlDataSource):
     def _qualify(self, table_name: str) -> str:
         """
         Ensure *table_name* is `project.dataset.table` and quoted.
-        Works for all three user inputs:
-          ✦   events_20250201
-          ✦   analytics_123.events_20250201
-          ✦   datawarehouse-447422.analytics_123.events_20250201
         """
-        bare = table_name.replace("`", "")          # drop back-ticks
+        bare = table_name.replace("`", "")
         parts = bare.split(".")
 
-        if len(parts) == 3:                         # already full
+        if len(parts) == 3:
             fq = bare
-        elif len(parts) == 2:                       # missing project
+        elif len(parts) == 2:
             fq = f"{self.project_id}.{bare}"
-        elif len(parts) == 1:                       # only table
-            if not self.dataset_id:
+        elif len(parts) == 1:
+            if self.dataset_id:
+                fq = f"{self.project_id}.{self.dataset_id}.{bare}"
+            elif bare in self.dataplex_metadata_lookup:
+                fq = self.dataplex_metadata_lookup[bare]
+            else:
                 raise ValueError(
                     f"Cannot qualify bare table '{table_name}' because "
                     "this DataSource was instantiated without a default "
-                    "`dataset_id`.  Pass dataset_id=… or store fully-"
-                    "qualified names in Dataplex."
+                    "`dataset_id`, and the table was not found in Dataplex metadata."
                 )
-            fq = f"{self.project_id}.{self.dataset_id}.{bare}"
         else:
-            raise ValueError(f"Unrecognised table identifier: {table_name}")
+            raise ValueError(f"Unrecognized table identifier: {table_name}")
 
         return f"`{fq}`"
 
