@@ -1,7 +1,7 @@
 # src/ryoma_ai/ryoma_ai/datasource/dataplex_loader.py
 import logging
 from typing import Iterator, Union, List
-
+from databuilder.models.table_metadata import TableMetadata
 from databuilder.loader.base_loader import Loader
 from pyhocon import ConfigTree
 
