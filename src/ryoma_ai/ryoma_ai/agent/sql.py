@@ -13,9 +13,11 @@ class SqlAgent(WorkflowAgent):
         self,
         model: str,
         model_parameters: Optional[Dict] = None,
+        tools: Optional[List] = None,  # allow injection of additional tools
     ):
-        super().__init__(
-            [SqlQueryTool(), CreateTableTool(), QueryProfileTool()],
-            model,
-            model_parameters,
-        )
+        # core SQL capabilities
+        base_tools = [SqlQueryTool(), CreateTableTool(), QueryProfileTool()]
+        tools = base_tools + (tools or [])
+
+        # delegate to WorkflowAgent
+        super().__init__(tools, model, model_parameters)
