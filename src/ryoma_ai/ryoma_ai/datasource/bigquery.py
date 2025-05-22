@@ -78,20 +78,34 @@ class BigQueryDataSource(SqlDataSource):
         return self
 
     def get_catalog(self, catalog: Optional[str] = None) -> Catalog:
+        """
+        Build a Catalog entirely from the Dataplex-enriched metadata we cached
+        in `self.metadata` during __init__.
+        """
         return Catalog(
             catalog_name=self.dataset_id or self.project_id or "default_catalog",
             schemas=[
                 Schema(
-                    schema_name=table.schema if hasattr(table, 'schema') else 'default_schema',
-                    tables=[Table(
-                        table_name=table.name,
-                        columns=table.columns  # already a list of Column objects
-                    )]
+                    schema_name = tbl.schema if hasattr(tbl, "schema") else "default_schema",
+                    tables = [
+                        Table(
+                            table_name = tbl.name,
+                            columns = [
+                                Column(                       # ← NEW: map each ColumnMetadata
+                                    name       = col.name,
+                                    type       = col.col_type,
+                                    nullable   = getattr(col, "nullable", None),
+                                    primary_key= getattr(col, "primary_key", None),
+                                )
+                                for col in tbl.columns        # col is ColumnMetadata
+                            ],
+                        )
+                    ],
                 )
-                for table in self.metadata or []
-            ]
+                for tbl in (self.metadata or [])
+            ],
         )
-
+        
     def _build_metadata_lookup(self):
         lookup = {}
         for table in self.metadata:
