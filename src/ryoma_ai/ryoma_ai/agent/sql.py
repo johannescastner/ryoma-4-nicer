@@ -13,6 +13,7 @@ class SqlAgent(WorkflowAgent):
         self,
         model: str,
         model_parameters: Optional[Dict] = None,
+        sql_db: Optional[SQLDatabase] = None,
         tools: Optional[List] = None,  # allow injection of additional tools
     ):
         # core SQL capabilities
@@ -21,3 +22,10 @@ class SqlAgent(WorkflowAgent):
 
         # delegate to WorkflowAgent
         super().__init__(tools, model, model_parameters)
+
+        # if the caller passed in a SQLDatabase, bind it right away:
+        if sql_db:
+            for t in self.tools:
+                if isinstance(t, SqlQueryTool):
+                    t.datasource = sql_db               
+                    break
