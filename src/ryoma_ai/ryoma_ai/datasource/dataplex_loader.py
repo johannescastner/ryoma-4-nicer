@@ -18,25 +18,23 @@ class DataplexLoader(Loader):
     def init(self, conf: ConfigTree) -> None:
         self.conf = conf
         self.metadata = []
+        self.write = conf.get_bool("write_metadata", False)   # ← NEW
         # Initialize the publisher (expects project_id + credentials in conf)
-        self.publisher = DataplexPublisher()
-        self.publisher.init(conf)
-        # If your publisher has a prepare or setup step:
-        if hasattr(self.publisher, "prepare"):
-            self.publisher.prepare()
+        if self.write:
+            self.publisher = DataplexPublisher()
+            self.publisher.init(conf)
+        else:
+            self.publisher = None
             
     def get_scope(self) -> str:
         return "publisher.dataplex_metadata"
 
     def load(self, record: Union[Iterator, object]) -> None:
-        # `record` may be a single TableMetadata or an iterator of them
-        if not hasattr(record, '__iter__') or isinstance(record, (str, bytes)):
-            records = iter([record])
-        else:
-            records = record  # already iterable
-        # Delegate publishing of metadata objects
-        self.metadata.append(record)
-        self.publisher.publish(records)
+        # normalise to iterable
+        records = record if hasattr(record, "__iter__") and not isinstance(record, (str, bytes)) else [record]
+        self.metadata.extend(records)
+        if self.write and self.publisher:
+            self.publisher.publish(records)   
 
     def close(self) -> None:
         # Finalize the publisher (flush buffers, commit transactions, etc.)
