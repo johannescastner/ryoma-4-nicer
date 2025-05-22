@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 from ryoma_ai.agent.workflow import WorkflowAgent
 from ryoma_ai.tool.sql_tool import CreateTableTool, QueryProfileTool, SqlQueryTool
