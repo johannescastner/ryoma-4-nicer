@@ -167,7 +167,13 @@ class DataplexPublisher(Publisher):
                     "Error publishing table %s: %s", tbl.name, e, exc_info=True
                 )
 
-
+    def publish(self, records: Iterator[TableMetadata]) -> None:
+        """
+        Public entry-point used by Databuilder Loader.
+        Simply forwards to publish_impl() so the existing logic
+        continues to work unchanged.
+        """
+        self.publish_impl(records)
 
 
 def crawl_with_dataplex(conf: ConfigTree) -> None:
