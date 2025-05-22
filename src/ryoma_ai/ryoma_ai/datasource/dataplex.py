@@ -47,7 +47,7 @@ class DataplexMetadataExtractor(Extractor):
         for lake in self.client.list_lakes(request={"parent": self.parent}):
             for zone in self.client.list_zones(request={"parent": lake.name}):
                 for asset in self.client.list_assets(request={"parent": zone.name}):
-                    if asset.resource_spec.type_ != "BIGQUERY_DATASET":
+                    if asset.resource_spec.type_ != Asset.ResourceSpec.Type.BIGQUERY_DATASET:
                         continue
 
                     dataset_ref = asset.resource_spec.name  # Format: projects/{project_id}/datasets/{dataset_id}
