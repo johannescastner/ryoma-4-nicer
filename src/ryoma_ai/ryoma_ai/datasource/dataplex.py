@@ -12,6 +12,8 @@ from databuilder.publisher.base_publisher import Publisher
 
 
 from google.cloud import dataplex_v1, bigquery
+from google.cloud.dataplex_v1.types import Asset
+
 from google.protobuf import struct_pb2
 
 #–– magic identifiers for the “generic” table entry and aspect in Dataplex Catalog:
