@@ -13,7 +13,7 @@ from databuilder.publisher.neo4j_csv_publisher import Neo4jCsvPublisher
 
 # Our custom Dataplex extractor & publisher
 from ryoma_ai.datasource.dataplex import DataplexMetadataExtractor, DataplexPublisher
-from ryoma_ai.datasource.metadata import Catalog, Table  # ensure these are correct
+from ryoma_ai.datasource.metadata import Catalog, Schema, Table, Column  # ensure these are correct
 
 class BigQueryDataSource(SqlDataSource):
     def __init__(
