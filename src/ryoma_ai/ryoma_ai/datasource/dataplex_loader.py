@@ -18,14 +18,17 @@ class DataplexLoader(Loader):
     def init(self, conf: ConfigTree) -> None:
         self.conf = conf
         self.metadata = []
-        self.write = conf.get_bool("write_metadata", False)   # ← NEW
+        self.write = (
+            conf.get_bool("write_metadata", False) or
+            conf.get_bool("publisher.dataplex_metadata.write_metadata", False)
+        )
         # Initialize the publisher (expects project_id + credentials in conf)
         if self.write:
             self.publisher = DataplexPublisher()
             self.publisher.init(conf)
         else:
             self.publisher = None
-            
+
     def get_scope(self) -> str:
         return "publisher.dataplex_metadata"
 
@@ -34,7 +37,7 @@ class DataplexLoader(Loader):
         records = record if hasattr(record, "__iter__") and not isinstance(record, (str, bytes)) else [record]
         self.metadata.extend(records)
         if self.write and self.publisher:
-            self.publisher.publish(records)   
+            self.publisher.publish(records)
 
     def close(self) -> None:
         # Finalize the publisher (flush buffers, commit transactions, etc.)
@@ -42,5 +45,4 @@ class DataplexLoader(Loader):
             self.publisher.finish()
 
     def get_metadata(self) -> List[TableMetadata]:
-        return self.metadata    
-        
+        return self.metadata
