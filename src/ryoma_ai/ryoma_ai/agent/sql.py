@@ -1,5 +1,5 @@
 from typing import Dict, Optional, List
-
+from ryoma_ai.vector_store.base import VectorStore
 from ryoma_ai.agent.workflow import WorkflowAgent
 from ryoma_ai.tool.sql_tool import CreateTableTool, QueryProfileTool, SqlQueryTool
 from langchain_community.utilities import SQLDatabase 
