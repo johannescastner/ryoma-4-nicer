@@ -16,13 +16,14 @@ class SqlAgent(WorkflowAgent):
         model_parameters: Optional[Dict] = None,
         sql_db: Optional[SQLDatabase] = None,
         tools: Optional[List] = None,  # allow injection of additional tools
+        vector_store: Optional[VectorStore] = None,
     ):
         # core SQL capabilities
         base_tools = [SqlQueryTool(), CreateTableTool(), QueryProfileTool()]
         tools = base_tools + (tools or [])
 
         # delegate to WorkflowAgent
-        super().__init__(tools, model, model_parameters)
+        super().__init__(tools, model, model_parameters, vector_store=vector_store)
 
         # if the caller passed in a SQLDatabase, bind it right away:
         if sql_db:
