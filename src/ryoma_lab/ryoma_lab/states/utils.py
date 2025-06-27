@@ -1,7 +1,7 @@
 import inspect
 from typing import Any
 
-from langchain_core.pydantic_v1 import BaseModel
+from pydantic import BaseModel
 
 
 def get_model_classes(model: Any) -> list:
