@@ -7,7 +7,6 @@ from typing import (
     Union,
     List
 )
-
 from IPython.display import Image, display
 from jupyter_ai_magics.providers import *
 from langchain.tools.render import render_text_description
@@ -15,6 +14,13 @@ from langchain_core.prompt_values import ChatPromptValue
 from langchain_core.messages import HumanMessage, ToolCall, ToolMessage
 from langchain_core.runnables import RunnableConfig, RunnableLambda
 from langchain_core.tools import BaseTool
+from pydantic import BaseModel
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    MessagesPlaceholder,
+    PromptTemplate
+)
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph
