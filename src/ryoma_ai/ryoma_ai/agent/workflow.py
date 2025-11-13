@@ -1,6 +1,12 @@
 import logging
 from enum import Enum
-from typing import List, Optional, Dict, Union
+from typing import (
+    Any,
+    Dict,
+    Optional,
+    Union,
+    List
+)
 
 from IPython.display import Image, display
 from jupyter_ai_magics.providers import *
@@ -14,7 +20,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph
 
 from langgraph.prebuilt import ToolNode, tools_condition
-from langgraph.pregel import StateSnapshot, Pregel
+from langgraph.pregel import Pregel
 
 from ryoma_ai.agent.chat_agent import ChatAgent
 from ryoma_ai.datasource.base import DataSource
@@ -127,7 +133,7 @@ class WorkflowAgent(ChatAgent):
     def get_graph(self):
         return self.workflow.get_graph(self.config)
 
-    def get_current_state(self) -> Optional[StateSnapshot]:
+    def get_current_state(self) -> Optional[Dict[str, Any]]:
         return self.workflow.get_state(self.config)
 
     def get_current_state_messages(self):
