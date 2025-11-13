@@ -11,9 +11,10 @@ from langchain_core.runnables import RunnableConfig, RunnableLambda
 from langchain_core.tools import BaseTool
 
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import StateGraph, CompiledGraph
+from langgraph.graph import StateGraph
+
 from langgraph.prebuilt import ToolNode, tools_condition
-from langgraph.pregel import StateSnapshot
+from langgraph.pregel import StateSnapshot, Pregel
 
 from ryoma_ai.agent.chat_agent import ChatAgent
 from ryoma_ai.datasource.base import DataSource
@@ -46,7 +47,7 @@ def handle_tool_error(state) -> dict:
 class WorkflowAgent(ChatAgent):
     tools: List[BaseTool]
     graph: StateGraph
-    workflow: CompiledGraph
+    workflow: Pregel
     type: AgentType = AgentType.workflow
 
     def __init__(
@@ -102,7 +103,7 @@ class WorkflowAgent(ChatAgent):
             self.prompt_template_factory.add_context_prompt(tool_prompt_template)
             return self.model
 
-    def _build_workflow(self, graph: StateGraph) -> CompiledGraph:
+    def _build_workflow(self, graph: StateGraph) -> Pregel:
         if graph:
             return graph.compile(checkpointer=self.memory, interrupt_before=["tools"])
         workflow = StateGraph(MessageState)
