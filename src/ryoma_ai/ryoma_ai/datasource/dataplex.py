@@ -13,7 +13,7 @@ from databuilder.publisher.base_publisher import Publisher
 
 from google.cloud import dataplex_v1, bigquery
 from google.cloud.dataplex_v1.types import Asset
-
+from google.api_core.exceptions import NotFound
 from google.protobuf import struct_pb2
 
 #–– magic identifiers for the “generic” table entry and aspect in Dataplex Catalog:
@@ -54,7 +54,18 @@ class DataplexMetadataExtractor(Extractor):
 
                     dataset_ref = asset.resource_spec.name  # Format: projects/{project_id}/datasets/{dataset_id}
                     project_id, dataset_id = dataset_ref.split("/")[1], dataset_ref.split("/")[3]
-                    dataset = bq_client.get_dataset(f"{project_id}.{dataset_id}")
+
+                    try:
+                        dataset = bq_client.get_dataset(f"{project_id}.{dataset_id}")
+                    except NotFound:
+                        LOGGER.warning(
+                            "Skipping stale Dataplex asset %s – dataset %s.%s not found",
+                            asset.name,
+                            project_id,
+                            dataset_id,
+                        )
+                        continue
+
                     tables = bq_client.list_tables(dataset)
 
                     for table in tables:
