@@ -11,7 +11,7 @@ from IPython.display import Image, display
 from jupyter_ai_magics.providers import *
 from langchain.tools.render import render_text_description
 from langchain_core.prompt_values import ChatPromptValue
-from langchain_core.messages import HumanMessage, ToolCall, ToolMessage
+from langchain_core.messages import HumanMessage, ToolCall, ToolMessage, AIMessage
 from langchain_core.runnables import RunnableConfig, RunnableLambda
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
@@ -246,6 +246,17 @@ class WorkflowAgent(ChatAgent):
             # If we hit the iteration cap *and* there is still work to do,
             # log it and force a wrap-up answer from the LLM using the
             # best information gathered so far.
+            #
+            # IMPORTANT: we must not pass an assistant message that
+            # contains `tool_calls` without corresponding ToolMessages
+            # afterwards, otherwise the OpenAI-compatible backends will
+            # raise:
+            #   "An assistant message with 'tool_calls' must be followed
+            #    by tool messages responding to each 'tool_call_id'."
+            #
+            # To preserve the *entire* conversation and all completed
+            # tool outputs, we keep the full history but strip any
+            # trailing assistant messages that *still* request tools.
             # ─────────────────────────────────────────────────────────────
             if current_state.next:
                 logging.warning(
@@ -257,7 +268,25 @@ class WorkflowAgent(ChatAgent):
                 )
 
                 # Pull the accumulated messages from the current state
-                state_messages = current_state.values.get("messages", [])
+                raw_messages = current_state.values.get("messages", []) or []
+
+                # Strip any trailing assistant messages that still
+                # contain tool_calls with no ToolMessage responses yet.
+                # This keeps all completed tool interactions while
+                # avoiding protocol violations.
+                trimmed_messages = list(raw_messages)
+                while trimmed_messages and isinstance(
+                    trimmed_messages[-1], AIMessage
+                ):
+                    last = trimmed_messages[-1]
+                    tool_calls = getattr(last, "tool_calls", None)
+                    if tool_calls:
+                        # This is an unfinished tool request – drop it
+                        # from the history we show to the wrap-up model.
+                        trimmed_messages.pop()
+                        continue
+                    # Last assistant message has no tool_calls – safe to keep.
+                    break
 
                 # Append an explicit wrap-up instruction so the model knows
                 # to answer with the best possible summary + next-steps.
@@ -272,10 +301,12 @@ class WorkflowAgent(ChatAgent):
                     "from X, or run profiling on Y')."
                 )
 
-                # We reuse the same model chain used in call_model().
+                # Reuse the same model chain used in call_model(), but
+                # with the cleaned-up history.
+
                 chain = self._build_chain()
                 wrapup_msg_state = MessageState(
-                    messages=state_messages + [HumanMessage(content=wrapup_instruction)]
+                    messages= trimmed_messages + [HumanMessage(content=wrapup_instruction)]
                 )
                 wrapup_response = chain.invoke(wrapup_msg_state, self.config)
                 result = {"messages": [wrapup_response]}
