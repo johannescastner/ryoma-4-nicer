@@ -235,9 +235,51 @@ class WorkflowAgent(ChatAgent):
                 iterations += 1
                 result = self.workflow.invoke(None, config=self.config)
                 if display:
-                    logging.info(f"Iteration {iterations}")
+                    logging.info(
+                        "Iteration %s",
+                        iterations
+                    )
                     self._print_graph_events(result, _printed)
                 current_state = self.get_current_state()
+
+            # ─────────────────────────────────────────────────────────────
+            # If we hit the iteration cap *and* there is still work to do,
+            # log it and force a wrap-up answer from the LLM using the
+            # best information gathered so far.
+            # ─────────────────────────────────────────────────────────────
+            if current_state.next:
+                logging.warning(
+                    "WorkflowAgent.invoke reached max_iterations=%s "
+                    "with pending next nodes=%s; "
+                    "generating best-effort wrap-up answer.",
+                    max_iterations,
+                    current_state.next,
+                )
+
+                # Pull the accumulated messages from the current state
+                state_messages = current_state.values.get("messages", [])
+
+                # Append an explicit wrap-up instruction so the model knows
+                # to answer with the best possible summary + next-steps.
+                wrapup_instruction = (
+                    "You have reached the current tool-usage budget for this task. "
+                    "Using ONLY the information available in the conversation and "
+                    "tool outputs so far, provide the best possible answer to the "
+                    "user's question. If you believe further tool calls or deeper "
+                    "analysis would materially improve the answer, briefly explain "
+                    "what additional steps you would take and why, phrased as "
+                    "suggestions to the user (e.g. 'I could next list more tables "
+                    "from X, or run profiling on Y')."
+                )
+
+                # We reuse the same model chain used in call_model().
+                chain = self._build_chain()
+                wrapup_msg_state = MessageState(
+                    messages=state_messages + [HumanMessage(content=wrapup_instruction)]
+                )
+                wrapup_response = chain.invoke(wrapup_msg_state, self.config)
+                result = {"messages": [wrapup_response]}
+
         if self.output_parser:
             chain = self.output_prompt | self.model | self.output_parser
             result = self._parse_output(chain, result, max_iterations=max_iterations)
