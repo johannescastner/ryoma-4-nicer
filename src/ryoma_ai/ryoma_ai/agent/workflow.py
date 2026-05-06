@@ -1,4 +1,5 @@
 import logging
+import uuid
 from enum import Enum
 from typing import (
     Any,
@@ -155,6 +156,14 @@ class WorkflowAgent(ChatAgent):
         return []
 
     def _format_messages(self, question: str):
+        # The returned messages become the **initial state seed** for
+        # ``self.workflow.invoke(messages, config)`` (line 225 below).
+        # LangGraph's ``add_messages`` reducer auto-assigns ids on state
+        # UPDATES, but the initial seed bypasses the reducer — so messages
+        # without ``id`` stay ``None`` and break downstream consumers like
+        # ``langmem._preprocess_messages`` (raises ``ValueError("Messages
+        # are required to have ID field.")``). Assigning here keeps every
+        # path the seed flows through id-bearing.
         current_state = self.get_current_state()
         if current_state.next and current_state.next[0] == "tools":
             # We are in the tool node, but the user has asked a new question
@@ -164,11 +173,14 @@ class WorkflowAgent(ChatAgent):
                     ToolMessage(
                         tool_call_id=tool_calls[0]["id"],
                         content=f"Tool call denied by user. Reasoning: '{question}'. Continue assisting, accounting for the user's input.",
+                        id=str(uuid.uuid4()),
                     )
                 ]
             )
         else:
-            return ChatPromptValue(messages=[HumanMessage(content=question)])
+            return ChatPromptValue(messages=[
+                HumanMessage(content=question, id=str(uuid.uuid4())),
+            ])
 
     def stream(
         self,
