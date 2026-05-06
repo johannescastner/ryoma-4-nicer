@@ -13,7 +13,9 @@ from databuilder.publisher.base_publisher import Publisher
 
 from google.cloud import dataplex_v1, bigquery
 from google.cloud.dataplex_v1.types import Entry
-from google.api_core.exceptions import Forbidden, NotFound, PermissionDenied
+from google.api_core.exceptions import (
+    BadRequest, Forbidden, NotFound, PermissionDenied,
+)
 from google.protobuf import struct_pb2
 
 #–– magic identifiers for the “generic” table entry and aspect in Dataplex Catalog:
@@ -143,9 +145,30 @@ class DataplexMetadataExtractor(Extractor):
             )
         except ValueError:
             return None
+        # Universal Catalog FQNs include literal backticks around BQ
+        # identifiers with special characters (spaces, hyphens etc. — e.g.
+        # ``bigquery:proj.dataset.`Table With Spaces```). The parser
+        # preserves the backticks, but ``get_table`` URL-encodes them and
+        # BQ rejects the request. Strip the SQL-quoting backticks so the
+        # client gets the raw identifier.
+        unquoted_project = ref.project.strip("`")
+        unquoted_dataset = ref.dataset_id.strip("`")
+        unquoted_table = ref.table_id.strip("`")
+        if (unquoted_project, unquoted_dataset, unquoted_table) != (
+            ref.project, ref.dataset_id, ref.table_id,
+        ):
+            ref = bigquery.TableReference(
+                bigquery.DatasetReference(unquoted_project, unquoted_dataset),
+                unquoted_table,
+            )
         try:
             table_obj = self.bq.get_table(ref)
-        except (NotFound, Forbidden) as exc:
+        except (NotFound, Forbidden, BadRequest) as exc:
+            # NotFound: Dataplex sees a table that's since been dropped.
+            # Forbidden: SA lacks read on this specific table.
+            # BadRequest: identifier still rejected by BQ (e.g., contains
+            #   chars that even backtick-stripping can't normalise — rare
+            #   but skipping is safer than crashing the iterator).
             LOGGER.debug(
                 "Skipping inaccessible BQ table %s: %s", ref, exc,
             )

@@ -37,7 +37,9 @@ Run from the ryoma fork root::
 from unittest.mock import MagicMock, patch
 
 import pytest
-from google.api_core.exceptions import Forbidden, NotFound, PermissionDenied
+from google.api_core.exceptions import (
+    BadRequest, Forbidden, NotFound, PermissionDenied,
+)
 from pyhocon import ConfigFactory
 
 from ryoma_ai.datasource.dataplex import DataplexMetadataExtractor
@@ -358,6 +360,87 @@ class TestStructuredParse:
         assert results[0].name == (
             "viebeg-data-vault.VIEBEG_Sales_analysis_dataset.amount"
         )
+
+    def test_strips_sql_quoting_backticks_from_table_name(self):
+        """Universal Catalog FQNs include literal backticks around BQ
+        identifiers that contain special characters (spaces, hyphens
+        etc.). Real-world example surfaced live against viebeg
+        (2026-05-06): ``bigquery:viebeg-data-vault.viebeg_impact_metrics.\\`Sanofi Impact KPIs\\```.
+
+        ``TableReference.from_string`` parses such an FQN with the
+        backticks preserved in ``table_id`` — but ``bq.get_table`` then
+        URL-encodes them and BQ rejects the request with
+        ``BadRequest: 400 ... Invalid table ID``. The extractor must
+        strip the SQL-quoting backticks before calling ``get_table``."""
+        ext = _make_extractor(gcp_location="us")
+        ext._mock_catalog.list_entries.return_value = iter([
+            _make_entry(
+                fqn=(
+                    "bigquery:viebeg-data-vault."
+                    "viebeg_impact_metrics."
+                    "`Sanofi Impact KPIs`"
+                ),
+                entry_type_suffix="bigquery-table",
+                location="us-central1",
+            )
+        ])
+        ext._mock_bq.get_table.side_effect = lambda ref: _make_bq_table(
+            project=ref.project,
+            dataset_id=ref.dataset_id,
+            table_id=ref.table_id,
+            columns=[_column("metric_value")],
+        )
+
+        results = _drain(ext)
+
+        assert len(results) == 1, (
+            "Expected one TableMetadata yielded; iterator must not "
+            "crash on backtick-wrapped names"
+        )
+        ref_arg = ext._mock_bq.get_table.call_args.args[0]
+        # Backticks stripped — get_table receives the raw identifier:
+        assert ref_arg.project == "viebeg-data-vault"
+        assert ref_arg.dataset_id == "viebeg_impact_metrics"
+        assert ref_arg.table_id == "Sanofi Impact KPIs"
+        # And the resulting TableMetadata uses the unquoted name:
+        assert results[0].name == (
+            "viebeg-data-vault.viebeg_impact_metrics.Sanofi Impact KPIs"
+        )
+
+    def test_skips_table_when_get_table_raises_badrequest(self):
+        """Defense-in-depth: if a table identifier still fails BQ
+        validation after backtick-stripping (e.g., contains other
+        special characters), skip it without crashing the iterator."""
+        ext = _make_extractor(gcp_location="us")
+        ext._mock_catalog.list_entries.return_value = iter([
+            _make_entry(
+                fqn="bigquery:p.d.weird_but_passes_parse",
+                entry_type_suffix="bigquery-table",
+                location="us",
+            ),
+            _make_entry(
+                fqn="bigquery:p.d.normal_table",
+                entry_type_suffix="bigquery-table",
+                location="us",
+            ),
+        ])
+
+        def _get_table_side_effect(ref):
+            if ref.table_id == "weird_but_passes_parse":
+                raise BadRequest("400 Invalid table ID")
+            return _make_bq_table(
+                project=ref.project,
+                dataset_id=ref.dataset_id,
+                table_id=ref.table_id,
+                columns=[_column("c")],
+            )
+
+        ext._mock_bq.get_table.side_effect = _get_table_side_effect
+
+        results = _drain(ext)
+
+        assert len(results) == 1
+        assert results[0].name == "p.d.normal_table"
 
 
 class TestConfiguration:
