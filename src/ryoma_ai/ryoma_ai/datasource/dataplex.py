@@ -1,7 +1,7 @@
 # src/ryoma_ai/ryoma_ai/datasource/dataplex.py
 
 import logging
-from typing import Iterator, Any, Dict
+from typing import Iterator, Any, Dict, List, Optional
 
 from pyhocon import ConfigTree
 from databuilder.extractor.base_extractor import Extractor
@@ -12,8 +12,8 @@ from databuilder.publisher.base_publisher import Publisher
 
 
 from google.cloud import dataplex_v1, bigquery
-from google.cloud.dataplex_v1.types import Asset
-from google.api_core.exceptions import NotFound
+from google.cloud.dataplex_v1.types import Entry
+from google.api_core.exceptions import Forbidden, NotFound, PermissionDenied
 from google.protobuf import struct_pb2
 
 #–– magic identifiers for the “generic” table entry and aspect in Dataplex Catalog:
@@ -25,71 +25,148 @@ LOGGER.setLevel(logging.INFO)
 
 
 class DataplexMetadataExtractor(Extractor):
+    """Extract BigQuery metadata via Dataplex Universal Catalog.
+
+    Enumerates BQ tables and views through the system-managed
+    ``@bigquery`` EntryGroup that Dataplex auto-populates from every
+    project's BigQuery datasets. Replaces the legacy Lake/Zone/Asset
+    walk, which required manual ``DataplexServiceClient`` Asset
+    registration that production deployments never set up — empirically
+    verified by 30+ days of "Found 0 tables in Dataplex" logs.
+
+    All entry filtering uses Google's documented contract fields
+    (``entry_source.system``, ``entry_type`` suffix,
+    ``fully_qualified_name`` prefix) and the BigQuery client's structured
+    ``TableReference.from_string`` parser. No regex, no path slicing.
+
+    Authoritative schema is fetched via ``bigquery.Client.get_table``
+    (same call the legacy code used). Tables Dataplex knows about that
+    the SA can't read (``Forbidden``/``NotFound``) are skipped with a
+    debug-level log rather than crashing the iterator.
     """
-    Extract metadata from Cloud Dataplex:
-      - list Lakes → Zones → Assets
-      - for TABLE/STREAM assets, pull out schema fields
-      - emit TableMetadata(ColumnMetadata…) for each table
-    """
+
+    # System-contract suffixes for BQ Universal Catalog. The
+    # ``projects/<google-internal>/...entryTypes/`` prefix varies (it's
+    # Google's project-number for the type registry), but the trailing
+    # name is the stable contract.
+    _BQ_TABLE_TYPE_SUFFIX = "/bigquery-table"
+    _BQ_VIEW_TYPE_SUFFIX = "/bigquery-view"
+    _BQ_FQN_PREFIX = "bigquery:"
+    # entry_source.system value Dataplex assigns to BQ-imported entries.
+    _SYSTEM_BIGQUERY = "BIGQUERY"
 
     def init(self, conf: ConfigTree) -> None:
         self.project = conf.get_string("project_id")
         # pick up explicit credentials if provided, else fallback to ADC
         self.creds = conf.get("credentials", None)
-        # Dataplex Content API for listing assets
-        self.client = dataplex_v1.DataplexServiceClient(
-            credentials=self.creds
-        )
-        # Parent path covers all locations: projects/{project}/locations/-
-        self.parent = f"projects/{self.project}/locations/-"
+        # Optional single-region scope. If absent, the iterator
+        # auto-discovers every region with an ``@bigquery`` EntryGroup
+        # via ``list_entry_groups(parent="projects/.../locations/-")``
+        # (the ``-`` wildcard works on entry-group listing — it does NOT
+        # work on ``list_entries`` parent, which is why we need the
+        # explicit per-region loop).
+        self.location: Optional[str] = conf.get("gcp_location", None) or None
+        self.catalog = dataplex_v1.CatalogServiceClient(credentials=self.creds)
+        self.bq = bigquery.Client(project=self.project, credentials=self.creds)
         self._iter = self._iterate_tables()
 
     def _iterate_tables(self) -> Iterator[TableMetadata]:
-        bq_client = bigquery.Client(project=self.project, credentials=self.creds)
-        for lake in self.client.list_lakes(request={"parent": self.parent}):
-            for zone in self.client.list_zones(request={"parent": lake.name}):
-                for asset in self.client.list_assets(request={"parent": zone.name}):
-                    if asset.resource_spec.type_ != Asset.ResourceSpec.Type.BIGQUERY_DATASET:
-                        continue
+        for group_parent in self._discover_bigquery_entry_groups():
+            for entry in self._list_entries(group_parent):
+                tm = self._entry_to_table_metadata(entry)
+                if tm is not None:
+                    yield tm
 
-                    dataset_ref = asset.resource_spec.name  # Format: projects/{project_id}/datasets/{dataset_id}
-                    project_id, dataset_id = dataset_ref.split("/")[1], dataset_ref.split("/")[3]
+    def _discover_bigquery_entry_groups(self) -> List[str]:
+        """Return the resource names of every ``@bigquery`` EntryGroup
+        for this project. Honors ``gcp_location`` if set; else
+        auto-discovers via the cross-region wildcard."""
+        if self.location:
+            return [
+                f"projects/{self.project}/locations/{self.location}/entryGroups/@bigquery"
+            ]
+        try:
+            return [
+                g.name
+                for g in self.catalog.list_entry_groups(
+                    request=dataplex_v1.ListEntryGroupsRequest(
+                        parent=f"projects/{self.project}/locations/-",
+                    )
+                )
+                if g.name.endswith("/entryGroups/@bigquery")
+            ]
+        except (PermissionDenied, NotFound) as exc:
+            LOGGER.warning(
+                "Dataplex EntryGroup discovery failed for project %s: %s",
+                self.project, exc,
+            )
+            return []
 
-                    try:
-                        dataset = bq_client.get_dataset(f"{project_id}.{dataset_id}")
-                    except NotFound:
-                        LOGGER.warning(
-                            "Skipping stale Dataplex asset %s – dataset %s.%s not found",
-                            asset.name,
-                            project_id,
-                            dataset_id,
-                        )
-                        continue
+    def _list_entries(self, group_parent: str) -> Iterator[Entry]:
+        """List BQ entries in one ``@bigquery`` EntryGroup. Region-level
+        ``NotFound`` / ``PermissionDenied`` is logged and skipped — some
+        regions legitimately lack a ``@bigquery`` group when there's no
+        BQ data there."""
+        try:
+            yield from self.catalog.list_entries(
+                request=dataplex_v1.ListEntriesRequest(parent=group_parent),
+            )
+        except (NotFound, PermissionDenied) as exc:
+            LOGGER.warning(
+                "Dataplex list_entries failed for %s: %s",
+                group_parent, exc,
+            )
 
-                    tables = bq_client.list_tables(dataset)
-
-                    for table in tables:
-                        table_ref = f"{project_id}.{dataset_id}.{table.table_id}"
-                        table_obj = bq_client.get_table(table_ref)
-                        cols = [
-                            ColumnMetadata(
-                                name=field.name,
-                                col_type=field.field_type,
-                                description=field.description or "",
-                                sort_order=i,
-                            )
-                            for i, field in enumerate(table_obj.schema)
-                        ]
-
-                        yield TableMetadata(
-                            database=dataset_id,
-                            cluster=lake.name.split("/")[-1],
-                            schema=dataset_id,
-                            name=table_ref,
-                            description=table_obj.description or "",
-                            columns=cols,
-                            is_view=table_obj.table_type == "VIEW",
-                        )
+    def _entry_to_table_metadata(
+        self, entry: Entry,
+    ) -> Optional[TableMetadata]:
+        """Convert one Dataplex Catalog entry into a ``TableMetadata`` if
+        (and only if) it represents a BigQuery table or view. Returns
+        ``None`` for datasets, malformed FQNs, and tables the SA can't
+        read."""
+        if entry.entry_source.system != self._SYSTEM_BIGQUERY:
+            return None
+        is_view = entry.entry_type.endswith(self._BQ_VIEW_TYPE_SUFFIX)
+        is_table = entry.entry_type.endswith(self._BQ_TABLE_TYPE_SUFFIX)
+        if not (is_table or is_view):
+            return None  # bigquery-dataset entry or unknown subtype — skip
+        fqn = entry.fully_qualified_name
+        if not fqn.startswith(self._BQ_FQN_PREFIX):
+            return None
+        try:
+            # ``TableReference.from_string`` is the BigQuery client's own
+            # grammar parser — accepts ``project.dataset.table`` and
+            # raises ``ValueError`` on anything else (e.g. dataset-level
+            # ``project.dataset`` form).
+            ref = bigquery.TableReference.from_string(
+                fqn[len(self._BQ_FQN_PREFIX):]
+            )
+        except ValueError:
+            return None
+        try:
+            table_obj = self.bq.get_table(ref)
+        except (NotFound, Forbidden) as exc:
+            LOGGER.debug(
+                "Skipping inaccessible BQ table %s: %s", ref, exc,
+            )
+            return None
+        return TableMetadata(
+            database=table_obj.dataset_id,
+            cluster=entry.entry_source.location,
+            schema=table_obj.dataset_id,
+            name=f"{table_obj.project}.{table_obj.dataset_id}.{table_obj.table_id}",
+            description=table_obj.description or "",
+            columns=[
+                ColumnMetadata(
+                    name=f.name,
+                    col_type=f.field_type,
+                    description=f.description or "",
+                    sort_order=i,
+                )
+                for i, f in enumerate(table_obj.schema)
+            ],
+            is_view=is_view,
+        )
 
     def extract(self) -> Any:
         try:
