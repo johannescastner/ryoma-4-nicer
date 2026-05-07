@@ -11,10 +11,14 @@ from ryoma_ai.datasource.base import SqlDataSource
 
 
 class SqlDataSourceTool(BaseTool, ABC):
+    """Tool for querying a SQL catalog."""
+
     datasource: Optional[SqlDataSource] = Field(None, exclude=True)
 
 
 class QueryInput(BaseModel):
+    """Input for the query tool."""
+
     query: str = Field(description="sql query that can be executed by the sql catalog.")
 
 
@@ -47,6 +51,8 @@ class SqlQueryTool(SqlDataSourceTool):
 
 
 class Column(BaseModel):
+    """Column in a table."""
+
     column_name: str = Field(..., description="Name of the column")
     column_type: str = Field(..., description="Type of the column")
     nullable: Optional[bool] = Field(None, description="Whether the column is nullable")
@@ -56,6 +62,8 @@ class Column(BaseModel):
 
 
 class Table(BaseModel):
+    """Table in a catalog."""
+
     table_name: str = Field(..., description="Name of the table")
     table_columns: Sequence[Column] = Field(
         ..., description="List of columns in the table"
