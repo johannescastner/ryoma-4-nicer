@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ryoma-nicer"
-version = "0.8.1"
+version = "0.8.2"
 description = "a clone from the root project for Ryoma AI Platform – made compatible with Pydantic v2"
 license = {file = "LICENSE"}
 readme = "README.md"

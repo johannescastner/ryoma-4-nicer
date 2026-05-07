@@ -14,7 +14,7 @@ from databuilder.publisher.base_publisher import Publisher
 from google.cloud import dataplex_v1, bigquery
 from google.cloud.dataplex_v1.types import Entry
 from google.api_core.exceptions import (
-    BadRequest, Forbidden, NotFound, PermissionDenied,
+    BadRequest, Forbidden, MethodNotImplemented, NotFound, PermissionDenied,
 )
 from google.protobuf import struct_pb2
 
@@ -105,15 +105,29 @@ class DataplexMetadataExtractor(Extractor):
             return []
 
     def _list_entries(self, group_parent: str) -> Iterator[Entry]:
-        """List BQ entries in one ``@bigquery`` EntryGroup. Region-level
-        ``NotFound`` / ``PermissionDenied`` is logged and skipped — some
-        regions legitimately lack a ``@bigquery`` group when there's no
-        BQ data there."""
+        """List BQ entries in one ``@bigquery`` EntryGroup. Catalog-side
+        benign failures are logged and skipped:
+
+        * ``NotFound`` / ``PermissionDenied`` — some regions
+          legitimately lack a ``@bigquery`` group when there's no BQ
+          data there, or the caller's SA lacks ``catalogViewer`` on
+          that region.
+        * ``MethodNotImplemented`` — ``list_entries`` returns gRPC
+          ``UNIMPLEMENTED`` (mapped from HTTP 404) when the region
+          itself doesn't have Dataplex Catalog enabled. Empirically
+          observed on the EU multi-region: the API endpoint exists but
+          rejects the call with ``Received http2 header with status:
+          404``. Treated as a benign empty region rather than an error.
+
+        Other ``GoogleAPICallError`` subclasses (e.g. ``BadRequest``,
+        ``InternalServerError``) propagate so genuine misconfiguration
+        surfaces rather than silently zero-result.
+        """
         try:
             yield from self.catalog.list_entries(
                 request=dataplex_v1.ListEntriesRequest(parent=group_parent),
             )
-        except (NotFound, PermissionDenied) as exc:
+        except (NotFound, PermissionDenied, MethodNotImplemented) as exc:
             LOGGER.warning(
                 "Dataplex list_entries failed for %s: %s",
                 group_parent, exc,

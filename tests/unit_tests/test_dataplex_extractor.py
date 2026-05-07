@@ -29,6 +29,12 @@ What these tests pin (one per concern):
     callers like ``crawl_dataplex_for_zone``.
   * ``test_handles_permission_denied_on_discovery_gracefully`` —
     project-level catalog read denial yields zero tables, never raises.
+  * ``test_list_entries_method_not_implemented_yields_empty_region`` —
+    region-level ``MethodNotImplemented`` (gRPC UNIMPLEMENTED, the
+    EU multi-region symptom) skips the region without raising.
+  * ``test_list_entries_unexpected_exception_propagates`` — unhandled
+    ``GoogleAPICallError`` subclasses (e.g. ``BadRequest``) propagate;
+    the catch-list is precisely typed, not over-broad.
 
 Run from the ryoma fork root::
 
@@ -483,4 +489,67 @@ class TestPermissionDeniedGraceful:
         assert results == []
         # We did NOT proceed to list_entries / get_table after the denial.
         ext._mock_catalog.list_entries.assert_not_called()
+
+
+class TestListEntriesRegionLevelFailures:
+    """``_list_entries`` is invoked once per ``@bigquery`` EntryGroup
+    auto-discovered for the project. Some regions fail benignly:
+
+      * ``NotFound`` / ``PermissionDenied`` — region has no BQ data, or
+        SA lacks ``catalogViewer`` on it.
+      * ``MethodNotImplemented`` — gRPC ``UNIMPLEMENTED``, observed
+        empirically on the EU multi-region (the API endpoint exists but
+        rejects with ``Received http2 header with status: 404``).
+        Surfaced 2026-05-06 in v19 eval as a 50-line traceback
+        masquerading as a real error — actually a benign region-level
+        skip condition.
+
+    Other ``GoogleAPICallError`` subclasses (``BadRequest``,
+    ``InternalServerError``, etc.) MUST propagate so genuine
+    misconfiguration surfaces rather than silently zero-result.
+    """
+
+    def test_list_entries_method_not_implemented_yields_empty_region(self):
+        """When the EU multi-region's catalog endpoint returns
+        ``MethodNotImplemented``, the iterator skips that region and
+        continues — total result is what other regions yielded
+        (zero in this test, since we mock only one group)."""
+        from google.api_core.exceptions import MethodNotImplemented as _MNI
+
+        ext = _make_extractor()
+        # One @bigquery EntryGroup discovered.
+        ext._mock_catalog.list_entry_groups.return_value = [MagicMock()]
+        ext._mock_catalog.list_entry_groups.return_value[0].name = (
+            "projects/test-proj/locations/eu/entryGroups/@bigquery"
+        )
+        # ...but listing entries in that region rejects with
+        # MethodNotImplemented (gRPC UNIMPLEMENTED, the EU-region
+        # symptom).
+        ext._mock_catalog.list_entries.side_effect = _MNI(
+            "Received http2 header with status: 404"
+        )
+
+        results = _drain(ext)
+
+        # No crash, no table results. The iterator must reach this
+        # state without raising.
+        assert results == []
+        ext._mock_catalog.list_entries.assert_called_once()
+
+    def test_list_entries_unexpected_exception_propagates(self):
+        """``BadRequest`` from ``list_entries`` is NOT in the benign
+        catch-list — it indicates real misconfiguration (malformed
+        parent path, invalid filter, etc.) and must propagate so the
+        operator sees it. Locks down 'no over-broad except'."""
+        ext = _make_extractor()
+        ext._mock_catalog.list_entry_groups.return_value = [MagicMock()]
+        ext._mock_catalog.list_entry_groups.return_value[0].name = (
+            "projects/test-proj/locations/us-central1/entryGroups/@bigquery"
+        )
+        ext._mock_catalog.list_entries.side_effect = BadRequest(
+            "malformed parent"
+        )
+
+        with pytest.raises(BadRequest):
+            _drain(ext)
         ext._mock_bq.get_table.assert_not_called()
