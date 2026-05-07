@@ -1,33 +1,26 @@
 import logging
 import uuid
 from enum import Enum
-from typing import (
-    Any,
-    Dict,
-    Optional,
-    Union,
-    List
-)
+from typing import Any, Dict, List, Optional, Union
+
 from IPython.display import Image, display
 from jupyter_ai_magics.providers import *
 from langchain.tools.render import render_text_description
-from langchain_core.prompt_values import ChatPromptValue
-from langchain_core.messages import HumanMessage, ToolCall, ToolMessage, AIMessage
-from langchain_core.runnables import RunnableConfig, RunnableLambda
-from langchain_core.tools import BaseTool
-from pydantic import BaseModel
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
+from langchain_core.prompt_values import ChatPromptValue
 from langchain_core.prompts import (
     ChatPromptTemplate,
     MessagesPlaceholder,
-    PromptTemplate
+    PromptTemplate,
 )
-
+from langchain_core.runnables import RunnableConfig, RunnableLambda
+from langchain_core.tools import BaseTool
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph
-
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.pregel import Pregel
+from pydantic import BaseModel
 
 from ryoma_ai.agent.chat_agent import ChatAgent
 from ryoma_ai.datasource.base import DataSource
@@ -169,7 +162,8 @@ class WorkflowAgent(ChatAgent):
             # We are in the tool node, but the user has asked a new question
             # We need to deny the tool call and continue with the user's question
             tool_calls = self.get_current_tool_calls()
-            return ChatPromptValue(messages=[
+            return ChatPromptValue(
+                messages=[
                     ToolMessage(
                         tool_call_id=tool_calls[0]["id"],
                         content=f"Tool call denied by user. Reasoning: '{question}'. Continue assisting, accounting for the user's input.",
@@ -178,9 +172,11 @@ class WorkflowAgent(ChatAgent):
                 ]
             )
         else:
-            return ChatPromptValue(messages=[
-                HumanMessage(content=question, id=str(uuid.uuid4())),
-            ])
+            return ChatPromptValue(
+                messages=[
+                    HumanMessage(content=question, id=str(uuid.uuid4())),
+                ]
+            )
 
     def stream(
         self,
@@ -247,10 +243,7 @@ class WorkflowAgent(ChatAgent):
                 iterations += 1
                 result = self.workflow.invoke(None, config=self.config)
                 if display:
-                    logging.info(
-                        "Iteration %s",
-                        iterations
-                    )
+                    logging.info("Iteration %s", iterations)
                     self._print_graph_events(result, _printed)
                 current_state = self.get_current_state()
 
@@ -287,9 +280,7 @@ class WorkflowAgent(ChatAgent):
                 # This keeps all completed tool interactions while
                 # avoiding protocol violations.
                 trimmed_messages = list(raw_messages)
-                while trimmed_messages and isinstance(
-                    trimmed_messages[-1], AIMessage
-                ):
+                while trimmed_messages and isinstance(trimmed_messages[-1], AIMessage):
                     last = trimmed_messages[-1]
                     tool_calls = getattr(last, "tool_calls", None)
                     if tool_calls:
@@ -318,7 +309,8 @@ class WorkflowAgent(ChatAgent):
 
                 chain = self._build_chain()
                 wrapup_msg_state = MessageState(
-                    messages= trimmed_messages + [HumanMessage(content=wrapup_instruction)]
+                    messages=trimmed_messages
+                    + [HumanMessage(content=wrapup_instruction)]
                 )
                 wrapup_response = chain.invoke(wrapup_msg_state, self.config)
                 result = {"messages": [wrapup_response]}

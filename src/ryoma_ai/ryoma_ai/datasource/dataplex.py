@@ -1,25 +1,27 @@
 # src/ryoma_ai/ryoma_ai/datasource/dataplex.py
 
 import logging
-from typing import Iterator, Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
-from pyhocon import ConfigTree
 from databuilder.extractor.base_extractor import Extractor
-from databuilder.task.task import DefaultTask
 from databuilder.job.job import DefaultJob
 from databuilder.models.table_metadata import ColumnMetadata, TableMetadata
 from databuilder.publisher.base_publisher import Publisher
-
-
-from google.cloud import dataplex_v1, bigquery
-from google.cloud.dataplex_v1.types import Entry
+from databuilder.task.task import DefaultTask
 from google.api_core.exceptions import (
-    BadRequest, Forbidden, MethodNotImplemented, NotFound, PermissionDenied,
+    BadRequest,
+    Forbidden,
+    MethodNotImplemented,
+    NotFound,
+    PermissionDenied,
 )
+from google.cloud import bigquery, dataplex_v1
+from google.cloud.dataplex_v1.types import Entry
 from google.protobuf import struct_pb2
+from pyhocon import ConfigTree
 
-#–– magic identifiers for the “generic” table entry and aspect in Dataplex Catalog:
-ENTRY_TYPE  = "projects/dataplex-types/locations/global/entryTypes/generic"
+# –– magic identifiers for the “generic” table entry and aspect in Dataplex Catalog:
+ENTRY_TYPE = "projects/dataplex-types/locations/global/entryTypes/generic"
 ASPECT_TYPE = "projects/dataplex-types/locations/global/aspectTypes/generic"
 
 LOGGER = logging.getLogger(__name__)
@@ -100,7 +102,8 @@ class DataplexMetadataExtractor(Extractor):
         except (PermissionDenied, NotFound) as exc:
             LOGGER.warning(
                 "Dataplex EntryGroup discovery failed for project %s: %s",
-                self.project, exc,
+                self.project,
+                exc,
             )
             return []
 
@@ -130,11 +133,13 @@ class DataplexMetadataExtractor(Extractor):
         except (NotFound, PermissionDenied, MethodNotImplemented) as exc:
             LOGGER.warning(
                 "Dataplex list_entries failed for %s: %s",
-                group_parent, exc,
+                group_parent,
+                exc,
             )
 
     def _entry_to_table_metadata(
-        self, entry: Entry,
+        self,
+        entry: Entry,
     ) -> Optional[TableMetadata]:
         """Convert one Dataplex Catalog entry into a ``TableMetadata`` if
         (and only if) it represents a BigQuery table or view. Returns
@@ -154,9 +159,7 @@ class DataplexMetadataExtractor(Extractor):
             # grammar parser — accepts ``project.dataset.table`` and
             # raises ``ValueError`` on anything else (e.g. dataset-level
             # ``project.dataset`` form).
-            ref = bigquery.TableReference.from_string(
-                fqn[len(self._BQ_FQN_PREFIX):]
-            )
+            ref = bigquery.TableReference.from_string(fqn[len(self._BQ_FQN_PREFIX) :])
         except ValueError:
             return None
         # Universal Catalog FQNs include literal backticks around BQ
@@ -169,7 +172,9 @@ class DataplexMetadataExtractor(Extractor):
         unquoted_dataset = ref.dataset_id.strip("`")
         unquoted_table = ref.table_id.strip("`")
         if (unquoted_project, unquoted_dataset, unquoted_table) != (
-            ref.project, ref.dataset_id, ref.table_id,
+            ref.project,
+            ref.dataset_id,
+            ref.table_id,
         ):
             ref = bigquery.TableReference(
                 bigquery.DatasetReference(unquoted_project, unquoted_dataset),
@@ -184,7 +189,9 @@ class DataplexMetadataExtractor(Extractor):
             #   chars that even backtick-stripping can't normalise — rare
             #   but skipping is safer than crashing the iterator).
             LOGGER.debug(
-                "Skipping inaccessible BQ table %s: %s", ref, exc,
+                "Skipping inaccessible BQ table %s: %s",
+                ref,
+                exc,
             )
             return None
         return TableMetadata(
@@ -255,21 +262,34 @@ class DataplexPublisher(Publisher):
                 schema_struct = struct_pb2.Struct(
                     fields={
                         "columns": struct_pb2.Value(
-                            list_value=struct_pb2.ListValue(values=[
-                                struct_pb2.Value(struct_value=struct_pb2.Struct(
-                                    fields={
-                                        "name": struct_pb2.Value(string_value=c.name),
-                                        "type": struct_pb2.Value(string_value=c.col_type or ""),
-                                        "description": struct_pb2.Value(string_value=c.description or ""),
-                                    }
-                                )) for c in tbl.columns
-                            ])
+                            list_value=struct_pb2.ListValue(
+                                values=[
+                                    struct_pb2.Value(
+                                        struct_value=struct_pb2.Struct(
+                                            fields={
+                                                "name": struct_pb2.Value(
+                                                    string_value=c.name
+                                                ),
+                                                "type": struct_pb2.Value(
+                                                    string_value=c.col_type or ""
+                                                ),
+                                                "description": struct_pb2.Value(
+                                                    string_value=c.description or ""
+                                                ),
+                                            }
+                                        )
+                                    )
+                                    for c in tbl.columns
+                                ]
+                            )
                         )
                     }
                 )
                 entry = dataplex_v1.Entry(
                     entry_type=ENTRY_TYPE,
-                    entry_source=dataplex_v1.EntrySource(description=tbl.description[:250]),
+                    entry_source=dataplex_v1.EntrySource(
+                        description=tbl.description[:250]
+                    ),
                     aspects={
                         ASPECT_TYPE: dataplex_v1.Aspect(
                             aspect_type=ASPECT_TYPE,
@@ -307,14 +327,17 @@ def crawl_with_dataplex(conf: ConfigTree) -> None:
     """
     extractor = DataplexMetadataExtractor()
     extractor.init(conf)
-    from ryoma_ai.datasource.dataplex_loader import DataplexLoader    # defer import to break the cycle    
-    loader = DataplexLoader()          # <-- concrete subclass
-    loader.init(conf)                  # <-- initialise it once
+    from ryoma_ai.datasource.dataplex_loader import (
+        DataplexLoader,  # defer import to break the cycle
+    )
+
+    loader = DataplexLoader()  # <-- concrete subclass
+    loader.init(conf)  # <-- initialise it once
 
     publisher = DataplexPublisher()
     publisher.init(conf)
     task = DefaultTask(extractor=extractor, loader=loader)
-    
+
     job = DefaultJob(conf=conf, task=task, publisher=publisher)
     job.launch()
     # ensure the loader is closed (flush buffers, etc.)

@@ -16,13 +16,14 @@ from feast.repo_operations import apply_total
 from feast.types import Array, Float32, UnixTimestamp
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.embeddings import Embeddings
+from sqlmodel import select
+
 from ryoma_lab.models.vector_store import (
     FeatureViewModel,
     VectorStore,
     VectorStoreConfig,
 )
 from ryoma_lab.services.datasource import DataSourceService
-from sqlmodel import select
 
 
 class VectorStoreService:

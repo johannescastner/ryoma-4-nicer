@@ -3,11 +3,11 @@ import uuid
 from typing import Any, Dict, Optional, Union
 
 from langchain_core.exceptions import OutputParserException
+from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
 from langchain_core.runnables import RunnableSerializable
-from langchain_core.language_models.chat_models import BaseChatModel
 from pydantic import BaseModel
 
 from ryoma_ai.agent.base import BaseAgent
@@ -72,8 +72,7 @@ class ChatAgent(BaseAgent):
         self.final_prompt_template = self.prompt_template_factory.build_prompt()
         self.output_parser = output_parser
 
-    def _build_chain(self,
-                     **kwargs) -> RunnableSerializable:
+    def _build_chain(self, **kwargs) -> RunnableSerializable:
         if not self.model:
             raise ValueError(
                 f"Unable to initialize model, please ensure you have valid configurations."
@@ -84,34 +83,29 @@ class ChatAgent(BaseAgent):
         return self.final_prompt_template | self.model
 
     def set_base_prompt(
-        self,
-        base_prompt: Optional[Union[str, ChatPromptTemplate]] = None
+        self, base_prompt: Optional[Union[str, ChatPromptTemplate]] = None
     ):
         self.prompt_template_factory.set_base_prompt(base_prompt)
         return self
 
     def set_context_prompt(
-        self,
-        context: Optional[Union[str, ChatPromptTemplate]] = None
+        self, context: Optional[Union[str, ChatPromptTemplate]] = None
     ):
         self.prompt_template_factory.add_context_prompt(context)
         return self
 
-    def add_prompt_context(self,
-                           prompt_context: str):
+    def add_prompt_context(self, prompt_context: str):
         self.prompt_template_factory.add_context_prompt(prompt_context)
         return self
 
-    def _format_messages(self,
-                         messages: str):
+    def _format_messages(self, messages: str):
         return {"messages": [HumanMessage(content=messages)]}
 
     def _add_datasource_context(self):
         for ds in self.get_resources_by_type(DataSource):
             self.add_prompt_context(str(ds.get_catalog()))
 
-    def _add_retrieval_context(self,
-                               query: str):
+    def _add_retrieval_context(self, query: str):
         if not self.vector_store:
             raise ValueError(
                 "Unable to initialize vector store, please ensure you have valid configurations."
@@ -156,10 +150,7 @@ class ChatAgent(BaseAgent):
     def get_current_state(self) -> None:
         return None
 
-    def _parse_output(self,
-                      chain,
-                      result: dict,
-                      max_iterations=10):
+    def _parse_output(self, chain, result: dict, max_iterations=10):
         iteration = 0
         while iteration < max_iterations:
             iteration += 1
@@ -173,8 +164,7 @@ class ChatAgent(BaseAgent):
                 ]
         return result
 
-    def set_output_parser(self,
-                          output_parser: BaseModel):
+    def set_output_parser(self, output_parser: BaseModel):
         self.output_parser = PydanticOutputParser(pydantic_object=output_parser)
         self.output_prompt = PromptTemplate(
             template="Return output in required format with given messages.\n{format_instructions}\n{messages}\n",

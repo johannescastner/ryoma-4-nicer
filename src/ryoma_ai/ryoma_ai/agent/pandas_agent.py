@@ -2,6 +2,7 @@ import io
 from typing import Dict, Optional
 
 from pandas import DataFrame
+
 from ryoma_ai.agent.workflow import WorkflowAgent
 from ryoma_ai.tool.pandas_tool import PandasTool
 from ryoma_ai.tool.python_tool import PythonTool
@@ -12,9 +13,7 @@ class PandasAgent(WorkflowAgent):
         "A pandas agent that can use pandas tools to interact with pandas DataFrames."
     )
 
-    def __init__(self,
-                 model: str,
-                 model_parameters: Dict = None):
+    def __init__(self, model: str, model_parameters: Dict = None):
         super().__init__(
             [
                 PandasTool(),

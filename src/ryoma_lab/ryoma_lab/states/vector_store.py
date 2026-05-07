@@ -5,6 +5,7 @@ from typing import Optional
 
 import reflex as rx
 from feast import FeatureStore
+
 from ryoma_lab.models.vector_store import FeatureViewModel, VectorStore
 from ryoma_lab.services.datasource import DataSourceService
 from ryoma_lab.services.vector_store import VectorStoreService

@@ -1,6 +1,7 @@
 import logging
 
 from langchain_core.embeddings import Embeddings
+
 from ryoma_ai.llm.provider import load_model_provider
 
 

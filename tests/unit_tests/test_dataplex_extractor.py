@@ -40,16 +40,14 @@ Run from the ryoma fork root::
 
     PYTHONPATH=src/ryoma_ai pytest tests/unit_tests/test_dataplex_extractor.py -v
 """
+
 from unittest.mock import MagicMock, patch
 
 import pytest
-from google.api_core.exceptions import (
-    BadRequest, Forbidden, NotFound, PermissionDenied,
-)
+from google.api_core.exceptions import BadRequest, Forbidden, NotFound, PermissionDenied
 from pyhocon import ConfigFactory
 
 from ryoma_ai.datasource.dataplex import DataplexMetadataExtractor
-
 
 # ============================================================================
 # Helpers — build mock objects shaped like real Dataplex / BQ responses.
@@ -88,9 +86,7 @@ def _make_bq_table(
 ):
     """Build a MagicMock that quacks like a ``bigquery.Table``."""
     if columns is None:
-        columns = [
-            MagicMock(name="row_id", field_type="STRING", description="row pk")
-        ]
+        columns = [MagicMock(name="row_id", field_type="STRING", description="row pk")]
         columns[0].name = "row_id"  # MagicMock(name=...) sets internal name
     tbl = MagicMock()
     tbl.project = project
@@ -120,11 +116,12 @@ def _make_extractor(*, gcp_location=None) -> DataplexMetadataExtractor:
         conf_dict["gcp_location"] = gcp_location
     conf = ConfigFactory.from_dict(conf_dict)
 
-    with patch(
-        "ryoma_ai.datasource.dataplex.dataplex_v1.CatalogServiceClient"
-    ) as catalog_cls, patch(
-        "ryoma_ai.datasource.dataplex.bigquery.Client"
-    ) as bq_cls:
+    with (
+        patch(
+            "ryoma_ai.datasource.dataplex.dataplex_v1.CatalogServiceClient"
+        ) as catalog_cls,
+        patch("ryoma_ai.datasource.dataplex.bigquery.Client") as bq_cls,
+    ):
         ext = DataplexMetadataExtractor()
         ext.init(conf)
         # Expose the mock instances that init() created so tests can
@@ -181,21 +178,25 @@ class TestDiscoveryAndIteration:
         # list_entries returns one BQ table per group.
         def _list_entries_side_effect(request):
             if request.parent.endswith("/us-central1/entryGroups/@bigquery"):
-                return iter([
-                    _make_entry(
-                        fqn="bigquery:test-proj.ds_a.tbl_a",
-                        entry_type_suffix="bigquery-table",
-                        location="us-central1",
-                    )
-                ])
+                return iter(
+                    [
+                        _make_entry(
+                            fqn="bigquery:test-proj.ds_a.tbl_a",
+                            entry_type_suffix="bigquery-table",
+                            location="us-central1",
+                        )
+                    ]
+                )
             if request.parent.endswith("/eu/entryGroups/@bigquery"):
-                return iter([
-                    _make_entry(
-                        fqn="bigquery:test-proj.ds_b.tbl_b",
-                        entry_type_suffix="bigquery-table",
-                        location="eu",
-                    )
-                ])
+                return iter(
+                    [
+                        _make_entry(
+                            fqn="bigquery:test-proj.ds_b.tbl_b",
+                            entry_type_suffix="bigquery-table",
+                            location="eu",
+                        )
+                    ]
+                )
             return iter([])
 
         ext._mock_catalog.list_entries.side_effect = _list_entries_side_effect
@@ -219,25 +220,28 @@ class TestDiscoveryAndIteration:
         ]
         # @cloudsql group never queried (filtered by suffix match).
         called_parents = [
-            c.kwargs["request"].parent
-            if "request" in c.kwargs
-            else c.args[0].parent
+            c.kwargs["request"].parent if "request" in c.kwargs else c.args[0].parent
             for c in ext._mock_catalog.list_entries.call_args_list
         ]
         assert all("@bigquery" in p for p in called_parents)
 
     def test_emits_views_with_is_view_true(self):
         ext = _make_extractor(gcp_location="us")
-        ext._mock_catalog.list_entries.return_value = iter([
-            _make_entry(
-                fqn="bigquery:p.d.v_my_view",
-                entry_type_suffix="bigquery-view",
-                location="us",
-            )
-        ])
+        ext._mock_catalog.list_entries.return_value = iter(
+            [
+                _make_entry(
+                    fqn="bigquery:p.d.v_my_view",
+                    entry_type_suffix="bigquery-view",
+                    location="us",
+                )
+            ]
+        )
         ext._mock_bq.get_table.return_value = _make_bq_table(
-            project="p", dataset_id="d", table_id="v_my_view",
-            table_type="VIEW", columns=[_column("x")],
+            project="p",
+            dataset_id="d",
+            table_id="v_my_view",
+            table_type="VIEW",
+            columns=[_column("x")],
         )
 
         results = _drain(ext)
@@ -253,13 +257,15 @@ class TestFiltering:
         """Dataset-level entries (entry_type=...bigquery-dataset) have no
         schema and must not be yielded as TableMetadata."""
         ext = _make_extractor(gcp_location="us")
-        ext._mock_catalog.list_entries.return_value = iter([
-            _make_entry(
-                fqn="bigquery:p.dataset_only",
-                entry_type_suffix="bigquery-dataset",
-                location="us",
-            )
-        ])
+        ext._mock_catalog.list_entries.return_value = iter(
+            [
+                _make_entry(
+                    fqn="bigquery:p.dataset_only",
+                    entry_type_suffix="bigquery-dataset",
+                    location="us",
+                )
+            ]
+        )
         # If get_table is called we'd know we leaked a dataset through.
         ext._mock_bq.get_table.side_effect = AssertionError(
             "get_table must not be called for dataset entries"
@@ -274,14 +280,16 @@ class TestFiltering:
         is skipped without crashing — even if the EntryGroup is
         @bigquery (in case Google ever leaks cross-system entries)."""
         ext = _make_extractor(gcp_location="us")
-        ext._mock_catalog.list_entries.return_value = iter([
-            _make_entry(
-                fqn="bigquery:p.d.t",
-                entry_type_suffix="bigquery-table",
-                system="CLOUDSQL",  # not BIGQUERY
-                location="us",
-            )
-        ])
+        ext._mock_catalog.list_entries.return_value = iter(
+            [
+                _make_entry(
+                    fqn="bigquery:p.d.t",
+                    entry_type_suffix="bigquery-table",
+                    system="CLOUDSQL",  # not BIGQUERY
+                    location="us",
+                )
+            ]
+        )
         ext._mock_bq.get_table.side_effect = AssertionError(
             "get_table must not be called for non-BIGQUERY entries"
         )
@@ -295,23 +303,25 @@ class TestFiltering:
         tables that have since been dropped (NotFound). Iterator must
         continue, not raise."""
         ext = _make_extractor(gcp_location="us")
-        ext._mock_catalog.list_entries.return_value = iter([
-            _make_entry(
-                fqn="bigquery:p.d.forbidden",
-                entry_type_suffix="bigquery-table",
-                location="us",
-            ),
-            _make_entry(
-                fqn="bigquery:p.d.gone",
-                entry_type_suffix="bigquery-table",
-                location="us",
-            ),
-            _make_entry(
-                fqn="bigquery:p.d.ok",
-                entry_type_suffix="bigquery-table",
-                location="us",
-            ),
-        ])
+        ext._mock_catalog.list_entries.return_value = iter(
+            [
+                _make_entry(
+                    fqn="bigquery:p.d.forbidden",
+                    entry_type_suffix="bigquery-table",
+                    location="us",
+                ),
+                _make_entry(
+                    fqn="bigquery:p.d.gone",
+                    entry_type_suffix="bigquery-table",
+                    location="us",
+                ),
+                _make_entry(
+                    fqn="bigquery:p.d.ok",
+                    entry_type_suffix="bigquery-table",
+                    location="us",
+                ),
+            ]
+        )
 
         def _get_table_side_effect(ref):
             if ref.table_id == "forbidden":
@@ -341,13 +351,15 @@ class TestStructuredParse:
         knows the BQ grammar. Verifying with a hyphenated project name."""
         ext = _make_extractor(gcp_location="us")
         # Real-world tenant project: viebeg-data-vault (two hyphens).
-        ext._mock_catalog.list_entries.return_value = iter([
-            _make_entry(
-                fqn="bigquery:viebeg-data-vault.VIEBEG_Sales_analysis_dataset.amount",
-                entry_type_suffix="bigquery-table",
-                location="us-central1",
-            )
-        ])
+        ext._mock_catalog.list_entries.return_value = iter(
+            [
+                _make_entry(
+                    fqn="bigquery:viebeg-data-vault.VIEBEG_Sales_analysis_dataset.amount",
+                    entry_type_suffix="bigquery-table",
+                    location="us-central1",
+                )
+            ]
+        )
         ext._mock_bq.get_table.side_effect = lambda ref: _make_bq_table(
             project=ref.project,
             dataset_id=ref.dataset_id,
@@ -379,17 +391,19 @@ class TestStructuredParse:
         ``BadRequest: 400 ... Invalid table ID``. The extractor must
         strip the SQL-quoting backticks before calling ``get_table``."""
         ext = _make_extractor(gcp_location="us")
-        ext._mock_catalog.list_entries.return_value = iter([
-            _make_entry(
-                fqn=(
-                    "bigquery:viebeg-data-vault."
-                    "viebeg_impact_metrics."
-                    "`Sanofi Impact KPIs`"
-                ),
-                entry_type_suffix="bigquery-table",
-                location="us-central1",
-            )
-        ])
+        ext._mock_catalog.list_entries.return_value = iter(
+            [
+                _make_entry(
+                    fqn=(
+                        "bigquery:viebeg-data-vault."
+                        "viebeg_impact_metrics."
+                        "`Sanofi Impact KPIs`"
+                    ),
+                    entry_type_suffix="bigquery-table",
+                    location="us-central1",
+                )
+            ]
+        )
         ext._mock_bq.get_table.side_effect = lambda ref: _make_bq_table(
             project=ref.project,
             dataset_id=ref.dataset_id,
@@ -418,18 +432,20 @@ class TestStructuredParse:
         validation after backtick-stripping (e.g., contains other
         special characters), skip it without crashing the iterator."""
         ext = _make_extractor(gcp_location="us")
-        ext._mock_catalog.list_entries.return_value = iter([
-            _make_entry(
-                fqn="bigquery:p.d.weird_but_passes_parse",
-                entry_type_suffix="bigquery-table",
-                location="us",
-            ),
-            _make_entry(
-                fqn="bigquery:p.d.normal_table",
-                entry_type_suffix="bigquery-table",
-                location="us",
-            ),
-        ])
+        ext._mock_catalog.list_entries.return_value = iter(
+            [
+                _make_entry(
+                    fqn="bigquery:p.d.weird_but_passes_parse",
+                    entry_type_suffix="bigquery-table",
+                    location="us",
+                ),
+                _make_entry(
+                    fqn="bigquery:p.d.normal_table",
+                    entry_type_suffix="bigquery-table",
+                    location="us",
+                ),
+            ]
+        )
 
         def _get_table_side_effect(ref):
             if ref.table_id == "weird_but_passes_parse":
@@ -546,9 +562,7 @@ class TestListEntriesRegionLevelFailures:
         ext._mock_catalog.list_entry_groups.return_value[0].name = (
             "projects/test-proj/locations/us-central1/entryGroups/@bigquery"
         )
-        ext._mock_catalog.list_entries.side_effect = BadRequest(
-            "malformed parent"
-        )
+        ext._mock_catalog.list_entries.side_effect = BadRequest("malformed parent")
 
         with pytest.raises(BadRequest):
             _drain(ext)

@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional
 
 from langchain_core.vectorstores import VectorStore as LCVectorStore
+
 from ryoma_ai.vector_store.base import SearchResult, VectorStore
 
 

@@ -1,8 +1,9 @@
 from typing import Optional
 
 import reflex as rx
-from ryoma_ai.models.agent import AgentType
 from sqlmodel import Field
+
+from ryoma_ai.models.agent import AgentType
 
 
 class Agent(rx.Model, table=True):

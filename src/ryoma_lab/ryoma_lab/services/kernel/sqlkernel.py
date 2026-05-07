@@ -2,10 +2,11 @@ import logging
 import re
 from typing import Any, Dict
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from ryoma_ai.datasource.base import SqlDataSource
 from ryoma_ai.datasource.factory import DataSourceFactory
 from ryoma_lab.services.kernel.base import BaseKernel
-from sqlalchemy.exc import SQLAlchemyError
 
 
 class SqlKernel(BaseKernel):

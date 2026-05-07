@@ -1,6 +1,7 @@
 import pytest
-from ryoma_ai.datasource.postgres import PostgresDataSource
 from sqlalchemy import create_engine
+
+from ryoma_ai.datasource.postgres import PostgresDataSource
 
 
 @pytest.fixture

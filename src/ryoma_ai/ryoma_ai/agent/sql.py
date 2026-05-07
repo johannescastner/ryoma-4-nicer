@@ -1,8 +1,10 @@
-from typing import Dict, Optional, List
-from ryoma_ai.vector_store.base import VectorStore
+from typing import Dict, List, Optional
+
+from langchain_community.utilities import SQLDatabase
+
 from ryoma_ai.agent.workflow import WorkflowAgent
 from ryoma_ai.tool.sql_tool import CreateTableTool, QueryProfileTool, SqlQueryTool
-from langchain_community.utilities import SQLDatabase 
+from ryoma_ai.vector_store.base import VectorStore
 
 
 class SqlAgent(WorkflowAgent):
@@ -29,5 +31,5 @@ class SqlAgent(WorkflowAgent):
         if sql_db:
             for t in self.tools:
                 if isinstance(t, SqlQueryTool):
-                    t.datasource = sql_db               
+                    t.datasource = sql_db
                     break

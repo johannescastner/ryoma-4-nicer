@@ -1,6 +1,7 @@
 import os
 
 import pytest
+
 from ryoma_ai.agent.base import ChatAgent
 from ryoma_ai.agent.sql import SqlAgent
 

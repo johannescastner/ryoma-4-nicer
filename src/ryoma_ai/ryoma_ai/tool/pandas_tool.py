@@ -1,6 +1,7 @@
 from typing import Optional, Type
 
 from pydantic import BaseModel, Field
+
 from ryoma_ai.datasource.base import SqlDataSource
 from ryoma_ai.tool.python_tool import PythonTool
 

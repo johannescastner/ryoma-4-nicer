@@ -1,6 +1,7 @@
 from typing import List, Optional
 
 from feast import FeatureStore
+
 from ryoma_ai.vector_store.base import SearchResult, VectorStore
 
 

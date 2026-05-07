@@ -7,6 +7,7 @@ from databuilder.loader.generic_loader import GenericLoader
 from databuilder.models.table_metadata import TableMetadata
 from langchain_core.embeddings import Embeddings
 from pyhocon import ConfigTree
+
 from ryoma_lab.models.data_catalog import TableTable
 from ryoma_lab.services import embedding as embedding_service
 from ryoma_lab.services.catalog import CatalogService

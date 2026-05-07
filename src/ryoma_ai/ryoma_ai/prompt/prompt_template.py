@@ -5,6 +5,7 @@ from langchain_core.prompts import (
     FewShotPromptTemplate,
     PromptTemplate,
 )
+
 from ryoma_ai.prompt.base import BasePromptTemplate, BasicContextPromptTemplate
 
 

@@ -15,6 +15,7 @@ This bug was surfaced empirically by the IntellAgent eval (2026-05-06):
 five user-facing scenario failures all rooted in this construction
 site. Fixed in 0.8.0.
 """
+
 from unittest.mock import MagicMock
 
 import pytest

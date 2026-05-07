@@ -1,6 +1,7 @@
 """The data catalog page """
 
 import reflex as rx
+
 from ryoma_ai.datasource.metadata import Table
 from ryoma_lab import styles
 from ryoma_lab.states.catalog import CatalogState

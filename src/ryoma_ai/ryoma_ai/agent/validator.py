@@ -58,9 +58,7 @@ class ValidatorAgent(WorkflowAgent):
 
         # ── Separate actual tools from validator schema ────────
         self._actual_tools: List[BaseTool] = list(tools or [])
-        self._actual_tool_names: set = {
-            t.name for t in self._actual_tools
-        }
+        self._actual_tool_names: set = {t.name for t in self._actual_tools}
         self._validator_schema_name: str = validator.__name__
 
         # For bind_tools: both real tools + validator schema
@@ -223,9 +221,7 @@ class ValidatorAgent(WorkflowAgent):
         elif messages := state.get("messages", []):
             ai_message = messages[-1]
         else:
-            raise ValueError(
-                f"No messages found in input state to tool_edge: {state}"
-            )
+            raise ValueError(f"No messages found in input state to tool_edge: {state}")
 
         if hasattr(ai_message, "tool_calls") and ai_message.tool_calls:
             # Distinguish real tool calls from validator schema calls.
@@ -250,9 +246,7 @@ class ValidatorAgent(WorkflowAgent):
         """
         return True
 
-    def _should_validate(
-        self, state: dict
-    ) -> Literal["validation", "__end__"]:
+    def _should_validate(self, state: dict) -> Literal["validation", "__end__"]:
         """Decide whether to (re)validate or exit the validation loop.
 
         Scope rules:
@@ -276,19 +270,17 @@ class ValidatorAgent(WorkflowAgent):
         for msg in reversed(messages):
             recent_msgs.append(msg)
             if isinstance(msg, ToolMessage):
-                is_val_error = (
-                    hasattr(msg, "additional_kwargs")
-                    and msg.additional_kwargs.get("is_validation_error")
-                )
+                is_val_error = hasattr(
+                    msg, "additional_kwargs"
+                ) and msg.additional_kwargs.get("is_validation_error")
                 if not is_val_error:
                     # Real tool result — this is the scope boundary
                     break
 
         # ── Already validated in this scope? ───────────────────
         for msg in recent_msgs:
-            if (
-                hasattr(msg, "additional_kwargs")
-                and msg.additional_kwargs.get("validated")
+            if hasattr(msg, "additional_kwargs") and msg.additional_kwargs.get(
+                "validated"
             ):
                 return END
 

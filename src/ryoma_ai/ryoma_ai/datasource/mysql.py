@@ -8,6 +8,7 @@ from databuilder.loader.base_loader import Loader
 from databuilder.task.task import DefaultTask
 from ibis import BaseBackend
 from pyhocon import ConfigFactory
+
 from ryoma_ai.datasource.base import SqlDataSource
 
 

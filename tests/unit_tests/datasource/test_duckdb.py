@@ -1,5 +1,6 @@
 import pandas as pd
 import pytest
+
 from ryoma_ai.datasource.duckdb import DuckDBDataSource
 
 
