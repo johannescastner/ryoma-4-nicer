@@ -23,7 +23,12 @@ uv-download:
 .PHONY: install
 install:
 	uv lock && uv pip compile pyproject.toml -o requirements.txt
-	uv sync
+	# --all-packages installs every workspace member (src/ryoma_ai,
+	# src/ryoma_lab) plus their transitive deps (langchain → langchain_core
+	# etc.). Without it, ``uv sync`` only installs the root ``ryoma-nicer``
+	# package's direct deps and unit tests fail at import on missing
+	# workspace-member transitives in CI.
+	uv sync --all-packages
 	#uv run mypy --install-types --non-interactive ./
 
 .PHONY: pre-commit-install
