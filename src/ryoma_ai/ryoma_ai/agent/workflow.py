@@ -14,7 +14,7 @@ from langchain_core.prompts import (
     MessagesPlaceholder,
     PromptTemplate,
 )
-from langchain_core.runnables import RunnableConfig, RunnableLambda
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph
@@ -34,20 +34,6 @@ class ToolMode(str, Enum):
     DISALLOWED = "disallowed"
     CONTINUOUS = "continuous"
     ONCE = "once"
-
-
-def handle_tool_error(state) -> dict:
-    error = state.get("error")
-    tool_calls = state["messages"][-1].tool_calls
-    return {
-        "messages": [
-            ToolMessage(
-                content=f"Error: {repr(error)}\n please fix your mistakes.",
-                tool_call_id=tc["id"],
-            )
-            for tc in tool_calls
-        ]
-    }
 
 
 class WorkflowAgent(ChatAgent):
@@ -354,8 +340,28 @@ class WorkflowAgent(ChatAgent):
 
     @staticmethod
     def build_tool_node(tools):
-        return ToolNode(tools).with_fallbacks(
-            [RunnableLambda(handle_tool_error)], exception_key="error"
+        """Build a tool-execution node that handles non-bubble-up errors
+        natively via langgraph's ``handle_tool_errors`` parameter.
+
+        Pre-fix this wrapped ``ToolNode`` in
+        ``with_fallbacks([handle_tool_error], exception_key="error")``
+        with the default ``exceptions_to_handle=(Exception,)``. That
+        catch swallowed ``GraphInterrupt`` (subclass of ``GraphBubbleUp``
+        subclass of ``Exception``), breaking ``ask_human`` end-to-end:
+        the interrupt was converted into an error ``ToolMessage``
+        instead of pausing the Pregel runtime so the harness could
+        resume with ``Command(resume=...)``.
+
+        Fix uses langgraph's native ``ToolNode(handle_tool_errors=...)``
+        callable, which by langgraph's own design correctly excludes
+        ``GraphBubbleUp`` (see ``langgraph/prebuilt/tool_node.py:447-455``).
+        The callable preserves the exact pre-fix error message format.
+        Also removes the now-redundant external ``with_fallbacks``
+        wrapper and the ``handle_tool_error`` helper function.
+        """
+        return ToolNode(
+            tools,
+            handle_tool_errors=lambda e: f"Error: {e!r}\n please fix your mistakes.",
         )
 
     def call_tool(self, tool_id: str, **kwargs):
