@@ -434,6 +434,59 @@ class BigQueryDataSource(SqlDataSource):
         conn = self.connect()
         return conn.sql(f"EXPLAIN {query}")
 
+    def get_query_profile(self, query: str) -> str:  # noqa: N802
+        """
+        Profile a BigQuery query without executing it.
+
+        Uses BigQuery's dry-run mode: no slots are consumed, no rows are
+        returned, and no data is read. The dry-run validates query syntax
+        and returns the resource estimate that would apply to a real run.
+
+        Returns a human-readable string with:
+          • estimated bytes processed (cost preview)
+          • estimated on-demand cost in USD
+          • result schema (column name and field type)
+          • a syntax-error message instead of raising, if the query is invalid
+
+        Use this before running expensive queries to confirm scope and cost.
+        """
+        from google.cloud import bigquery
+
+        client = bigquery.Client(
+            project=self.project_id,
+            credentials=self.credentials,
+        )
+        job_config = bigquery.QueryJobConfig(
+            dry_run=True,
+            use_query_cache=False,
+        )
+        try:
+            job = client.query(query, job_config=job_config)
+        except Exception as exc:  # noqa: BLE001 — surface validation errors as strings
+            return f"Query profile failed: {type(exc).__name__}: {exc}"
+
+        bytes_processed = job.total_bytes_processed or 0
+        gb_processed = bytes_processed / (1024 ** 3)
+        # On-demand pricing: $5 per TB scanned (the first 1 TB/month is free
+        # but that quota is account-wide, not per-query, so we report gross).
+        estimated_cost_usd = (bytes_processed / (1024 ** 4)) * 5.0
+
+        schema = job.schema or []
+        if schema:
+            schema_str = ", ".join(
+                f"{field.name}:{field.field_type}" for field in schema
+            )
+        else:
+            schema_str = "(no result schema; non-SELECT query)"
+
+        return (
+            "Query profile (dry-run; no slots consumed):\n"
+            f"  estimated_bytes_processed: {bytes_processed:,} ({gb_processed:.3f} GB)\n"
+            f"  estimated_cost_usd: ${estimated_cost_usd:.4f} "
+            "(on-demand pricing; reservations may differ)\n"
+            f"  result_schema: {schema_str}"
+        )
+
 
 class BigqueryDataSource(BigQueryDataSource):
     """
