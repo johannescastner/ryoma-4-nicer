@@ -86,13 +86,45 @@ class WorkflowAgent(ChatAgent):
         self.memory = MemorySaver()
         self.workflow = self._build_workflow(graph)
 
-    def _bind_tools(self):
-        logging.info(f"Binding tools {self.tools} to model")
+    def add_datasource(self, datasource: DataSource, index: bool = False):
+        """Register a DataSource and re-walk tools to assign it.
+
+        Overrides ``BaseAgent.add_datasource`` so that registering a
+        datasource AFTER ``__init__`` (the canonical baby-NICER flow,
+        ``reflective.py:1942``) actually propagates to tools that
+        declare a ``datasource`` field. Pre-fix the registration only
+        added to the registry without re-walking tools, leaving every
+        SqlDataSourceTool subclass except SqlQueryTool with
+        ``datasource = None`` indefinitely.
+
+        The helper does not re-bind the model (no model rebuild),
+        keeping this lightweight relative to a full ``_bind_tools``.
+        """
+        super().add_datasource(datasource, index=index)
+        self._assign_datasources_to_tools()
+        return self
+
+    def _assign_datasources_to_tools(self):
+        """Assign every registered DataSource to tools that declare a
+        ``datasource`` Pydantic field.
+
+        Called from ``_bind_tools`` (init-time path) and from
+        ``add_datasource`` (post-init path). Lightweight: no model
+        rebinding. The Pydantic field check is the canonical signal that
+        a tool wants a datasource bound — no brittle ``isinstance`` tied
+        to a specific class hierarchy, no dead ``hasattr(tool, "type")``
+        gate (which never fired because no BaseTool declares a ``type``
+        attribute).
+        """
         datasources = self.get_resources_by_type(DataSource)
         for datasource in datasources:
             for tool in self.tools:
-                if hasattr(tool, "type"):
+                if "datasource" in getattr(type(tool), "model_fields", {}):
                     tool.datasource = datasource
+
+    def _bind_tools(self):
+        logging.info(f"Binding tools {self.tools} to model")
+        self._assign_datasources_to_tools()
         if hasattr(self.model, "bind_tools"):
             return self.model.bind_tools(self.tools)
         else:

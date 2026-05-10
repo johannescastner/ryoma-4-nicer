@@ -27,9 +27,13 @@ class SqlAgent(WorkflowAgent):
         # delegate to WorkflowAgent
         super().__init__(tools, model, model_parameters, vector_store=vector_store)
 
-        # if the caller passed in a SQLDatabase, bind it right away:
+        # If the caller passed in a SQLDatabase, register it as a
+        # datasource. The new ``add_datasource`` override on
+        # WorkflowAgent then walks every tool that declares a
+        # ``datasource`` Pydantic field (SqlQueryTool, QueryProfileTool,
+        # CreateTableTool, QueryPlanTool, ...) and assigns the
+        # datasource. Replaces the previous SqlQueryTool-only special
+        # case (kept only because the old ``_bind_tools`` gate was dead
+        # code; now the gate works for every SqlDataSourceTool).
         if sql_db:
-            for t in self.tools:
-                if isinstance(t, SqlQueryTool):
-                    t.datasource = sql_db
-                    break
+            self.add_datasource(sql_db)

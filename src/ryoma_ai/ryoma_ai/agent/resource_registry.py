@@ -61,15 +61,30 @@ class ResourceRegistry:
 
     def get_by_type(self, cls: Type[T]) -> List[T]:
         """
-        Retrieve all objects of a given type.
+        Retrieve all objects of a given type, including subclass instances.
+
+        Walks via isinstance so that registering a ``BigQueryDataSource``
+        and asking for ``DataSource`` returns the registered instance.
+        The fast path (exact-class match) is preserved.
 
         Args:
             cls: The class/type to filter by.
 
         Returns:
-            List of matching objects.
+            List of matching objects (exact-class + isinstance subclass matches).
         """
-        return self._by_type.get(cls, [])
+        # Fast path: exact-class match returns immediately.
+        if cls in self._by_type:
+            return list(self._by_type[cls])
+        # Fallback: walk every registered type and collect instances of cls.
+        # Covers subclass lookup (e.g., get_by_type(DataSource) returns
+        # registered BigQueryDataSource instances). Pre-fix this returned [].
+        return [
+            obj
+            for objs in self._by_type.values()
+            for obj in objs
+            if isinstance(obj, cls)
+        ]
 
     def get_by_name(self, name: str) -> Optional[Any]:
         """
