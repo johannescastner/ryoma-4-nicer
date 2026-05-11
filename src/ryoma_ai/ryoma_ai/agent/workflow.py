@@ -36,6 +36,45 @@ class ToolMode(str, Enum):
     ONCE = "once"
 
 
+# Metadata-key contract for tools whose execution must not be
+# silently dropped when ``WorkflowAgent.invoke`` hits its iteration
+# cap. Such "terminal primitives" carry user-visible side effects
+# (``ask_human`` calls ``langgraph.types.interrupt()`` and pauses the
+# graph for a human reply; swarm handoff tools transfer control to a
+# parent agent via ``Command(goto=..., graph=PARENT)``) that the
+# synthesised "best-effort" wrap-up answer cannot replace. Tool
+# builders set ``tool.metadata[TERMINAL_PRIMITIVE_METADATA_KEY] =
+# True`` to mark a tool as terminal; the drain block in ``invoke``
+# below then runs one more super-step so the tool actually executes.
+TERMINAL_PRIMITIVE_METADATA_KEY = "__terminal_primitive"
+
+
+def _is_terminal_tool(tool: Optional[BaseTool]) -> bool:
+    """Return True iff ``tool`` is a terminal primitive — a tool that
+    must be allowed to execute even past the iteration cap.
+
+    Identification is structural via ``tool.metadata`` keys:
+
+      * ``TERMINAL_PRIMITIVE_METADATA_KEY`` — set explicitly by tool
+        builders that wrap ``langgraph.types.interrupt(...)``.
+      * ``"__handoff_destination"`` — set by
+        ``langgraph_swarm.handoff.create_handoff_tool``. Re-using its
+        marker key (rather than duplicating) keeps the contract
+        single-sourced and means swarm handoffs are automatically
+        treated as terminal without baby-NICER or the swarm package
+        having to import this module.
+
+    Returns False on ``None`` so callers can safely look tools up by
+    name without separate null-checks.
+    """
+    if tool is None:
+        return False
+    md = getattr(tool, "metadata", None) or {}
+    if md.get(TERMINAL_PRIMITIVE_METADATA_KEY):
+        return True
+    return "__handoff_destination" in md
+
+
 class WorkflowAgent(ChatAgent):
     tools: List[BaseTool]
     graph: StateGraph
@@ -264,6 +303,35 @@ class WorkflowAgent(ChatAgent):
                     logging.info("Iteration %s", iterations)
                     self._print_graph_events(result, _printed)
                 current_state = self.get_current_state()
+
+            # ─────────────────────────────────────────────────────────────
+            # TERMINAL-PRIMITIVE DRAIN: if the cap was reached while a
+            # queued tool call is a terminal primitive (``ask_human`` →
+            # ``interrupt()``, or a swarm handoff), drain ONE more
+            # super-step so the tool actually executes. Without this
+            # the tool call is silently dropped: the graph paused at
+            # the ``interrupt_before=['tools']`` boundary, not the
+            # inner ``interrupt()`` boundary, so the harness never
+            # sees a human-input request. Identification is structural
+            # via ``tool.metadata`` keys — see ``_is_terminal_tool``.
+            if current_state.next == ("tools",):
+                pending_msgs = current_state.values.get("messages", []) or []
+                last = pending_msgs[-1] if pending_msgs else None
+                queued_calls = getattr(last, "tool_calls", None) or []
+                tools_by_name = {t.name: t for t in self.tools}
+                if queued_calls and all(
+                    _is_terminal_tool(tools_by_name.get(tc["name"] if isinstance(tc, dict) else getattr(tc, "name", None)))
+                    for tc in queued_calls
+                ):
+                    logging.info(
+                        "WorkflowAgent.invoke: draining terminal-"
+                        "primitive tool(s) %s past iteration cap.",
+                        [tc["name"] if isinstance(tc, dict) else getattr(tc, "name", None) for tc in queued_calls],
+                    )
+                    result = self.workflow.invoke(None, config=self.config)
+                    if display:
+                        self._print_graph_events(result, _printed)
+                    current_state = self.get_current_state()
 
             # ─────────────────────────────────────────────────────────────
             # If we hit the iteration cap *and* there is still work to do,

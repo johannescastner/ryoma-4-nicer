@@ -367,8 +367,14 @@ class BigQueryDataSource(SqlDataSource):
                 # Execute the query directly with the BigQuery client
                 return self._bq_client.query(sql).to_dataframe()
             except Exception as e:
+                # Include the failing SQL in the WARNING so build-log
+                # analysis can recover the LLM's emitted query without
+                # downloading the per-experiment SQLite memory.db from
+                # GCS. v30's malformed-INFORMATION_SCHEMA recovery
+                # exposed this logging gap (sql=%r added 2026-05-11).
                 logging.warning(
-                    f"Error executing INFORMATION_SCHEMA query with BigQuery client: {e}"
+                    "Error executing INFORMATION_SCHEMA query with "
+                    "BigQuery client: %s sql=%r", e, sql,
                 )
                 # Fall back to the standard method
 
