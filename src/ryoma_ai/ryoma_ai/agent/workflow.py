@@ -334,6 +334,49 @@ class WorkflowAgent(ChatAgent):
                     current_state = self.get_current_state()
 
             # ─────────────────────────────────────────────────────────────
+            # POST-DRAIN INTERRUPT GUARD: if the drained step's tool called
+            # ``interrupt()``, the Pregel loop suppressed the GraphInterrupt
+            # and surfaced it via BOTH ``result['__interrupt__']`` AND
+            # ``current_state.tasks[*].interrupts``. But ``state.next``
+            # remains ``('tools',)`` (per langgraph 0.6.x — the
+            # interrupted task is listed because its writes are empty),
+            # so the wrap-up condition below would otherwise fire and
+            # synthesise an AI answer that OVERWRITES ``result`` —
+            # clobbering the ``__interrupt__`` key and rendering the
+            # pause invisible to callers (eval harness, slack server).
+            #
+            # We check BOTH views for defense-in-depth: the immediate-
+            # return dict AND the persistent state-snapshot view. They
+            # should always agree, but checking both costs nothing
+            # (both are in scope) and protects against future divergence.
+            #
+            # When an interrupt is present we return ``result`` raw —
+            # NOT through ``output_parser`` — because the graph is
+            # paused; there is no final agent answer to parse. The
+            # caller reads ``result['__interrupt__']`` directly.
+            #
+            # Bug empirically reproduced in v31 IntellAgent eval at
+            # 16:23:31 (build 82d0ec4c) and standalone-reproduced via
+            # ``/tmp/probe_drain_state.py``.
+            interrupts_in_result = (
+                bool(result.get("__interrupt__"))
+                if isinstance(result, dict) else False
+            )
+            interrupts_in_state = any(
+                getattr(t, "interrupts", None)
+                for t in (current_state.tasks or [])
+            )
+            if interrupts_in_result or interrupts_in_state:
+                logging.info(
+                    "WorkflowAgent.invoke: graph paused at interrupt "
+                    "after terminal-primitive drain; skipping wrap-up "
+                    "synthesis. result['__interrupt__']=%s, "
+                    "state.tasks.interrupts=%s",
+                    interrupts_in_result, interrupts_in_state,
+                )
+                return result
+
+            # ─────────────────────────────────────────────────────────────
             # If we hit the iteration cap *and* there is still work to do,
             # log it and force a wrap-up answer from the LLM using the
             # best information gathered so far.
