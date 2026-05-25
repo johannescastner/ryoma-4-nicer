@@ -16,6 +16,7 @@ from langchain_core.prompts import (
 )
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -91,6 +92,7 @@ class WorkflowAgent(ChatAgent):
         context_prompt_templates: Optional[list[PromptTemplate]] = None,
         output_prompt_template: Optional[PromptTemplate] = None,
         output_parser: Optional[BaseModel] = None,
+        checkpointer: Optional[BaseCheckpointSaver] = None,
         **kwargs,
     ):
         logging.info(f"Initializing Workflow Agent with model: {model}")
@@ -108,7 +110,10 @@ class WorkflowAgent(ChatAgent):
         if self.tools:
             self.model = self._bind_tools()
 
-        self.memory = MemorySaver()
+        # A durable checkpointer (e.g. a Postgres saver) supplied by the host
+        # makes interrupt/resume survive a process restart or a different
+        # instance; default to the in-RAM MemorySaver when none is given.
+        self.memory = checkpointer or MemorySaver()
         self.workflow = self._build_workflow(graph)
 
     def add_datasource(self, datasource: DataSource, index: bool = False):

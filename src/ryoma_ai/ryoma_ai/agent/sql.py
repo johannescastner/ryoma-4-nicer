@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional
 
 from langchain_community.utilities import SQLDatabase
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from ryoma_ai.agent.workflow import WorkflowAgent
 from ryoma_ai.tool.sql_tool import CreateTableTool, QueryProfileTool, SqlQueryTool
@@ -19,13 +20,21 @@ class SqlAgent(WorkflowAgent):
         sql_db: Optional[SQLDatabase] = None,
         tools: Optional[List] = None,  # allow injection of additional tools
         vector_store: Optional[VectorStore] = None,
+        checkpointer: Optional[BaseCheckpointSaver] = None,
     ):
         # core SQL capabilities
         base_tools = [SqlQueryTool(), CreateTableTool(), QueryProfileTool()]
         tools = base_tools + (tools or [])
 
-        # delegate to WorkflowAgent
-        super().__init__(tools, model, model_parameters, vector_store=vector_store)
+        # delegate to WorkflowAgent (forward the optional durable checkpointer so
+        # interrupt/resume can survive a restart or a different host instance)
+        super().__init__(
+            tools,
+            model,
+            model_parameters,
+            vector_store=vector_store,
+            checkpointer=checkpointer,
+        )
 
         # If the caller passed in a SQLDatabase, register it as a
         # datasource. The new ``add_datasource`` override on
