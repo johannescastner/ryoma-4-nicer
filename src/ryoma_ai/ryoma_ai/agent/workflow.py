@@ -37,6 +37,18 @@ class ToolMode(str, Enum):
     ONCE = "once"
 
 
+class NoProgressResumeError(RuntimeError):
+    """Raised by ``WorkflowAgent.invoke`` in CONTINUOUS mode when a resume
+    continuation step advances no checkpoint state and surfaces no interrupt —
+    a wedged no-op resume. Fires on the FIRST such iteration instead of silently
+    burning the iteration budget into a fabricated wrap-up answer (the 2026-07-10
+    incident: ~200 no-op resumes, zero error telemetry).
+
+    Scoped to ``invoke()`` only; ``stream()`` CONTINUOUS is a separately-tracked
+    dead-generator path and is deliberately not guarded here.
+    """
+
+
 # Metadata-key contract for tools whose execution must not be
 # silently dropped when ``WorkflowAgent.invoke`` hits its iteration
 # cap. Such "terminal primitives" carry user-visible side effects
@@ -303,11 +315,49 @@ class WorkflowAgent(ChatAgent):
             iterations = 0
             while current_state.next and iterations < max_iterations:
                 iterations += 1
+                # Wedge detection (invoke-only). Capture checkpoint identity BEFORE
+                # the continuation step so a real advance can be told from a no-op.
+                _checkpoint_before = (
+                    (current_state.config or {}).get("configurable", {}) or {}
+                ).get("checkpoint_id")
                 result = self.workflow.invoke(None, config=self.config)
                 if display:
                     logging.info("Iteration %s", iterations)
                     self._print_graph_events(result, _printed)
                 current_state = self.get_current_state()
+                # A continuation step that produces NEITHER checkpoint progress NOR
+                # a real interrupt is a wedge: an interrupt_before boundary re-fires
+                # as a no-op every resume (e.g. shared checkpoint lineage), the tool
+                # never executes, and all max_iterations would otherwise be burned
+                # before a wrap-up is synthesised from nothing. A legitimate dynamic
+                # interrupt (ask_human) also leaves checkpoint_id unchanged, so it is
+                # exempted via tasks[].interrupts.
+                _checkpoint_after = (
+                    (current_state.config or {}).get("configurable", {}) or {}
+                ).get("checkpoint_id")
+                _progressed = _checkpoint_after != _checkpoint_before
+                _paused_at_interrupt = any(
+                    getattr(_t, "interrupts", None)
+                    for _t in (current_state.tasks or [])
+                )
+                if not _progressed and not _paused_at_interrupt:
+                    # Log at the raise site so the wedge leaves evidence even if a
+                    # downstream handler swallows the (RuntimeError-subclass)
+                    # exception — the 2026-07-10 incident's defining symptom was
+                    # zero error telemetry.
+                    logging.error(
+                        "WorkflowAgent.invoke CONTINUOUS resume made no progress "
+                        "on iteration %s (checkpoint_id unchanged and no interrupt "
+                        "pending) — the continuation is wedged; raising "
+                        "NoProgressResumeError.",
+                        iterations,
+                    )
+                    raise NoProgressResumeError(
+                        "WorkflowAgent.invoke CONTINUOUS resume made no progress "
+                        f"on iteration {iterations} (checkpoint_id unchanged and "
+                        "no interrupt pending) — the continuation is wedged; "
+                        "refusing to burn the remaining iteration budget."
+                    )
 
             # ─────────────────────────────────────────────────────────────
             # TERMINAL-PRIMITIVE DRAIN: if the cap was reached while a
