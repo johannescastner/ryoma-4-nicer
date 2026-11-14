@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ryoma-nicer"
-version = "0.9.0"
+version = "0.9.1"
 description = "a clone from the root project for Ryoma AI Platform – made compatible with Pydantic v2"
 license = {file = "LICENSE"}
 readme = "README.md"
@@ -28,6 +28,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+langchain1 = [
+  "langchain>=1.5.0,<2",
+  "langchain-core>=1.8.0,<2",
+  "langchain-community>=0.4.2,<0.5",
+  "langchain-openai>=1.8.0,<2",
+  "langgraph>=1.2.22,<2",
+  "ipython>=8.14.0",
+  "pandas>=2.2.2",
+]
 bigquery = [
   "google-cloud-bigquery>=3.33.0",
   "gcsfs>=2025.3.2",

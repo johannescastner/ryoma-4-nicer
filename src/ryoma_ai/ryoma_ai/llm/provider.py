@@ -1,37 +1,44 @@
-import logging
+"""Model construction through LangChain's maintained native registries.
+
+Provider identifiers use LangChain's ``provider:model`` format. Existing
+Ryoma identifiers for the same integrations remain aliases. Passing an
+already constructed BaseChatModel to ChatAgent/SqlAgent remains unchanged.
+Jupyter's notebook-only provider discovery is not needed by the agent library.
+"""
+
 from typing import Dict, Optional
 
-from jupyter_ai_magics.utils import (
-    AnyProvider,
-    decompose_model_id,
-    get_em_providers,
-    get_lm_providers,
-)
+from langchain_core.embeddings import Embeddings
+from langchain_core.language_models.chat_models import BaseChatModel
+
+# These names are already published by RyomaLab's provider choices. Only
+# normalize the provider prefix; Bedrock model IDs themselves contain colons.
+_PROVIDER_ALIASES = {
+    "openai-chat": "openai",
+    "bedrock-chat": "bedrock",
+    "azure-chat-openai": "azure_openai",
+    "nvidia-chat": "nvidia",
+    "gemini": "google_genai",
+    "huggingface_hub": "huggingface",
+    "togetherai": "together",
+}
 
 
 def load_model_provider(
     model_id: str,
     model_type: Optional[str] = "chat",
     model_parameters: Optional[Dict] = None,
-) -> Optional[AnyProvider]:
-    """
-    Get a model instance from a model_id string. This is using the jupyter ai magic library to load the
-    chat and embedding models dynamically.
-    @param model_id: str: The model id string.
-    @param model_type: model type can be either "chat" and "embedding".
-    @param model_parameters: Optional[Dict]: Additional parameters to pass to the model.
-    @return: Optional[AnyProvider]: The model instance.
-    """
-    logging.info(
-        f"Loading model provider with model id: {model_id}, model type: {model_type}"
-    )
-    providers = get_lm_providers() if model_type == "chat" else get_em_providers()
-    provider_id, local_model_id = decompose_model_id(model_id, providers)
+) -> BaseChatModel | Embeddings:
+    params = dict(model_parameters or {})
+    provider, separator, model = model_id.partition(":")
+    if separator and provider in _PROVIDER_ALIASES:
+        model_id = f"{_PROVIDER_ALIASES[provider]}:{model}"
+    if model_type == "chat":
+        from langchain.chat_models import init_chat_model
 
-    if provider_id is None or provider_id not in providers:
-        logging.info(f"Provider id: {provider_id} not found in providers.")
-        return None
-    Provider = providers[provider_id]
-    provider_params = {"model_id": local_model_id}
-    model_parameters = model_parameters or {}
-    return Provider(**provider_params, **model_parameters)
+        return init_chat_model(model_id, **params)
+    if model_type == "embedding":
+        from langchain.embeddings import init_embeddings
+
+        return init_embeddings(model_id, **params)
+    raise ValueError(f"Unsupported model type: {model_type!r}; use chat or embedding")

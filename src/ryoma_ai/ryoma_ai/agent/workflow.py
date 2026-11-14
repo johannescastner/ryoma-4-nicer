@@ -4,8 +4,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 from IPython.display import Image, display
-from jupyter_ai_magics.providers import *
-from langchain.tools.render import render_text_description
+from langchain_core.tools.render import render_text_description
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
 from langchain_core.prompt_values import ChatPromptValue
@@ -208,6 +207,8 @@ class WorkflowAgent(ChatAgent):
         return self.workflow.get_graph(self.config)
 
     def get_current_state(self) -> Optional[Dict[str, Any]]:
+        if self.workflow.checkpointer is None:
+            return None
         return self.workflow.get_state(self.config)
 
     def get_current_state_messages(self):
@@ -217,7 +218,7 @@ class WorkflowAgent(ChatAgent):
         return []
 
     def get_current_tool_calls(self) -> List[ToolCall]:
-        current_state_messages = self.get_current_state().values.get("messages")
+        current_state_messages = self.get_current_state_messages()
         if current_state_messages and current_state_messages[-1].tool_calls:
             return current_state_messages[-1].tool_calls
         return []
@@ -232,7 +233,7 @@ class WorkflowAgent(ChatAgent):
         # are required to have ID field.")``). Assigning here keeps every
         # path the seed flows through id-bearing.
         current_state = self.get_current_state()
-        if current_state.next and current_state.next[0] == "tools":
+        if current_state and current_state.next and current_state.next[0] == "tools":
             # We are in the tool node, but the user has asked a new question
             # We need to deny the tool call and continue with the user's question
             tool_calls = self.get_current_tool_calls()
@@ -277,7 +278,7 @@ class WorkflowAgent(ChatAgent):
         if tool_mode == ToolMode.CONTINUOUS:
             current_state = self.get_current_state()
             iterations = 0
-            while current_state.next and iterations < max_iterations:
+            while current_state and current_state.next and iterations < max_iterations:
                 iterations += 1
                 events = self.workflow.stream(None, config=self.config)
                 if display:
@@ -313,7 +314,7 @@ class WorkflowAgent(ChatAgent):
             logging.info("Starting the iterative invocation process.")
             current_state = self.get_current_state()
             iterations = 0
-            while current_state.next and iterations < max_iterations:
+            while current_state and current_state.next and iterations < max_iterations:
                 iterations += 1
                 # Wedge detection (invoke-only). Capture checkpoint identity BEFORE
                 # the continuation step so a real advance can be told from a no-op.
@@ -369,7 +370,7 @@ class WorkflowAgent(ChatAgent):
             # inner ``interrupt()`` boundary, so the harness never
             # sees a human-input request. Identification is structural
             # via ``tool.metadata`` keys — see ``_is_terminal_tool``.
-            if current_state.next == ("tools",):
+            if current_state and current_state.next == ("tools",):
                 pending_msgs = current_state.values.get("messages", []) or []
                 last = pending_msgs[-1] if pending_msgs else None
                 queued_calls = getattr(last, "tool_calls", None) or []
@@ -419,7 +420,7 @@ class WorkflowAgent(ChatAgent):
             )
             interrupts_in_state = any(
                 getattr(t, "interrupts", None)
-                for t in (current_state.tasks or [])
+                for t in ((current_state.tasks if current_state else ()) or [])
             )
             if interrupts_in_result or interrupts_in_state:
                 logging.info(
@@ -447,7 +448,7 @@ class WorkflowAgent(ChatAgent):
             # tool outputs, we keep the full history but strip any
             # trailing assistant messages that *still* request tools.
             # ─────────────────────────────────────────────────────────────
-            if current_state.next:
+            if current_state and current_state.next:
                 logging.warning(
                     "WorkflowAgent.invoke reached max_iterations=%s "
                     "with pending next nodes=%s; "

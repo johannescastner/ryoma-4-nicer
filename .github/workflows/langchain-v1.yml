@@ -1,0 +1,20 @@
+name: Patched LangChain compatibility
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  agent-library:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install '.[langchain1]'
+      - run: >-
+          python -m pytest -c /dev/null tests/security/test_langchain_v1.py
+          tests/unit_tests/test_workflow_agent.py
+          tests/unit_tests/test_bind_tools_datasource_field.py
+          tests/unit_tests/test_add_datasource_rebinds_tools.py
+          tests/unit_tests/test_build_tool_node_propagates_bubbleup.py
+          tests/unit_tests/test_workflow_invoke_drains_terminal_primitives.py -q

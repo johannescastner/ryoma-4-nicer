@@ -1,4 +1,4 @@
-from langchain.embeddings.base import Embeddings
+from langchain_core.embeddings import Embeddings
 from langchain_community.vectorstores import Chroma, PGVector, Qdrant
 
 from ryoma_ai.vector_store.base import VectorStore

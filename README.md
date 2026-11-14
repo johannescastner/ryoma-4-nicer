@@ -6,6 +6,20 @@
 
 ---
 
+## Patched LangChain agent library
+
+The `langchain1` extra installs the patched LangChain1/LangGraph1 stack for
+`ryoma_ai` agents. Model strings use the native `provider:model` registry, and
+existing Ryoma aliases such as `openai-chat`, `bedrock-chat` and
+`azure-chat-openai` remain accepted. Passing an existing LangChain chat-model
+object keeps that same object throughout the agent.
+
+This compatibility path does not import or install Jupyter AI magics. The
+separate legacy RyomaLab notebook/UI workspace retains its own optional
+provider dependencies; it is not part of this agent-library qualification.
+Provider integrations still require their normal integration package and
+credentials. The compatibility tests construct models without making API calls.
+
 ## Overview
 
 **Ryoma Nicer** is a community-maintained fork of the
