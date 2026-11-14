@@ -46,8 +46,8 @@ formatting: codestyle
 #* Linting
 .PHONY: test
 unit-test:
-	PYTHONPATH=$(PYTHONPATH) uv run pytest -c pyproject.toml --cov-report=html --cov=packages tests/unit_tests
-	uv run coverage-badge -o assets/images/coverage.svg -f
+	PYTHONPATH=$(PYTHONPATH) uv run pytest -c pyproject.toml --cov-report=html --cov-report=xml --cov=ryoma_ai tests/unit_tests
+	uv run genbadge coverage --local -i coverage.xml -o assets/images/coverage.svg
 
 .PHONY: check-codestyle
 check-codestyle:
@@ -68,7 +68,7 @@ lint: test check-codestyle mypy check-safety
 
 .PHONY: update-dev-deps
 update-dev-deps:
-	uv add -D bandit@latest darglint@latest "isort[colors]@latest" mypy@latest pre-commit@latest pydocstyle@latest pylint@latest pytest@latest pyupgrade@latest safety@latest coverage@latest coverage-badge@latest pytest-html@latest pytest-cov@latest
+	uv add -D bandit@latest darglint@latest "isort[colors]@latest" mypy@latest pre-commit@latest pydocstyle@latest pylint@latest pytest@latest pyupgrade@latest safety@latest coverage@latest "genbadge[coverage]@latest" pytest-html@latest pytest-cov@latest
 	uv add -D --allow-prereleases black@latest
 
 #* Docker
