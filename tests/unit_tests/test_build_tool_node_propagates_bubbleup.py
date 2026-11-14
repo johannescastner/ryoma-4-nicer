@@ -24,6 +24,7 @@ pass preserves the exact pre-fix error message format
 Tests use REAL instances throughout (real Pregel graph, real ToolNode,
 real langgraph errors) — no mocks per the project's no-mocks principle.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -36,7 +37,6 @@ from langgraph.graph.message import MessagesState
 from langgraph.types import Command, interrupt
 
 from ryoma_ai.agent.workflow import WorkflowAgent
-
 
 # ──────────────────────────────────────────────────────────────────
 # Tools simulating each scenario
@@ -145,9 +145,7 @@ def test_parent_command_propagates():
     """
     graph = _build_graph([t_parent_command])
     cfg = {"configurable": {"thread_id": "test-parent-command"}}
-    initial = {
-        "messages": [_ai_with_tool_call("t_parent_command", {"payload": "x"})]
-    }
+    initial = {"messages": [_ai_with_tool_call("t_parent_command", {"payload": "x"})]}
 
     # ParentCommand should not be converted into an error ToolMessage.
     # Either it propagates as an exception OR the runtime captures it.
@@ -211,9 +209,7 @@ def test_custom_exception_becomes_error_tool_message():
     """
     graph = _build_graph([t_custom_error])
     cfg = {"configurable": {"thread_id": "test-custom-error"}}
-    initial = {
-        "messages": [_ai_with_tool_call("t_custom_error", {"query": "boom"})]
-    }
+    initial = {"messages": [_ai_with_tool_call("t_custom_error", {"query": "boom"})]}
 
     result = graph.invoke(initial, cfg)
     last_msg = result["messages"][-1]

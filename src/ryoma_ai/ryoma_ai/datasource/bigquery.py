@@ -374,7 +374,9 @@ class BigQueryDataSource(SqlDataSource):
                 # exposed this logging gap (sql=%r added 2026-05-11).
                 logging.warning(
                     "Error executing INFORMATION_SCHEMA query with "
-                    "BigQuery client: %s sql=%r", e, sql,
+                    "BigQuery client: %s sql=%r",
+                    e,
+                    sql,
                 )
                 # Fall back to the standard method
 
@@ -472,10 +474,10 @@ class BigQueryDataSource(SqlDataSource):
             return f"Query profile failed: {type(exc).__name__}: {exc}"
 
         bytes_processed = job.total_bytes_processed or 0
-        gb_processed = bytes_processed / (1024 ** 3)
+        gb_processed = bytes_processed / (1024**3)
         # On-demand pricing: $5 per TB scanned (the first 1 TB/month is free
         # but that quota is account-wide, not per-query, so we report gross).
-        estimated_cost_usd = (bytes_processed / (1024 ** 4)) * 5.0
+        estimated_cost_usd = (bytes_processed / (1024**4)) * 5.0
 
         schema = job.schema or []
         if schema:

@@ -11,6 +11,7 @@ Fix: keep the exact-class fast path but add an isinstance fallback so
 ``get_by_type(BaseClass)`` returns every registered instance whose
 type IS-A ``BaseClass``.
 """
+
 from __future__ import annotations
 
 from ryoma_ai.agent.resource_registry import ResourceRegistry

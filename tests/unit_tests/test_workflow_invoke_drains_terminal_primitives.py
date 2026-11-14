@@ -21,6 +21,7 @@ invocations both fired exactly at iteration 200; the wrap-up
 truncated them. The harness never observed the interrupt, so the
 HITL code path was structurally untestable.
 """
+
 from __future__ import annotations
 
 import ast
@@ -34,6 +35,7 @@ def test_terminal_primitive_metadata_key_exported():
     other repos (e.g. baby-NICER's ``build_ask_human_tool``) can
     stamp it on their tools without re-defining the magic string."""
     from ryoma_ai.agent.workflow import TERMINAL_PRIMITIVE_METADATA_KEY
+
     assert isinstance(TERMINAL_PRIMITIVE_METADATA_KEY, str)
     assert TERMINAL_PRIMITIVE_METADATA_KEY  # non-empty
 
@@ -42,6 +44,7 @@ def test_is_terminal_tool_recognises_explicit_marker():
     """A tool with ``metadata[TERMINAL_PRIMITIVE_METADATA_KEY] = True``
     must be classified as terminal."""
     from langchain_core.tools import tool
+
     from ryoma_ai.agent.workflow import (
         TERMINAL_PRIMITIVE_METADATA_KEY,
         _is_terminal_tool,
@@ -62,6 +65,7 @@ def test_is_terminal_tool_recognises_handoff_metadata_key():
     so the drain block runs for them too — without us hard-coding
     the swarm package's marker."""
     from langchain_core.tools import tool
+
     from ryoma_ai.agent.workflow import _is_terminal_tool
 
     @tool
@@ -75,12 +79,14 @@ def test_is_terminal_tool_recognises_handoff_metadata_key():
 
 def test_is_terminal_tool_returns_false_for_ordinary_tool():
     from langchain_core.tools import tool
+
     from ryoma_ai.agent.workflow import _is_terminal_tool
 
     @tool
     def t_plain(x: str) -> str:
         """Stub ordinary tool."""
         return x
+
     assert _is_terminal_tool(t_plain) is False
 
 
@@ -88,6 +94,7 @@ def test_is_terminal_tool_handles_none_safely():
     """The drain logic looks tools up by name and may get None back
     if the name doesn't match. Must not raise."""
     from ryoma_ai.agent.workflow import _is_terminal_tool
+
     assert _is_terminal_tool(None) is False
 
 
@@ -98,11 +105,15 @@ def test_drain_block_does_not_string_match_tool_names():
     ``"transfer_"``. Brittle string matching is forbidden by the
     project's no-regex / no-string-match policy."""
     from ryoma_ai.agent import workflow
+
     src = inspect.getsource(workflow.WorkflowAgent.invoke)
     tree = ast.parse(inspect.cleandoc(src))
     forbidden_literals = {
-        "ask_human", "transfer_to_", "transfer_to_chat_pro",
-        "handoff", "swarm_handoff",
+        "ask_human",
+        "transfer_to_",
+        "transfer_to_chat_pro",
+        "handoff",
+        "swarm_handoff",
     }
     for node in ast.walk(tree):
         if isinstance(node, ast.Constant) and isinstance(node.value, str):
@@ -119,6 +130,7 @@ def test_bigquery_datasource_query_warning_includes_sql():
     we can recover the LLM's actual emitted text from the build log
     without downloading SQLite memory.db from GCS."""
     from ryoma_ai.datasource import bigquery
+
     src = inspect.getsource(bigquery)
     # Find the WARNING block; assert it carries either ``sql=%r`` or
     # ``sql={sql}`` (any param formatter against the SQL variable).
@@ -175,6 +187,7 @@ def _build_drain_test_agent(tool_with_interrupt):
         FakeMessagesListChatModel,
     )
     from langchain_core.messages import AIMessage
+
     from ryoma_ai.agent.workflow import WorkflowAgent
 
     # Stub LLM that replies with a tool_call AIMessage on every call.
@@ -184,12 +197,14 @@ def _build_drain_test_agent(tool_with_interrupt):
     # the responses are pre-baked.
     ai = AIMessage(
         content="invoking tool",
-        tool_calls=[{
-            "name": tool_with_interrupt.name,
-            "args": {"question": "USD or JPY?"},
-            "id": "tc_drain_1",
-            "type": "tool_call",
-        }],
+        tool_calls=[
+            {
+                "name": tool_with_interrupt.name,
+                "args": {"question": "USD or JPY?"},
+                "id": "tc_drain_1",
+                "type": "tool_call",
+            }
+        ],
     )
 
     class _StubChatModel(FakeMessagesListChatModel):
@@ -214,6 +229,7 @@ def test_drain_skips_wrapup_when_interrupt_pauses_graph():
     """
     from langchain_core.tools import tool
     from langgraph.types import interrupt
+
     from ryoma_ai.agent.workflow import (
         TERMINAL_PRIMITIVE_METADATA_KEY,
         ToolMode,
@@ -224,6 +240,7 @@ def test_drain_skips_wrapup_when_interrupt_pauses_graph():
         """Terminal-primitive tool that pauses for human input."""
         a = interrupt({"q": question})
         return f"resumed:{a}"
+
     t_pause.metadata = {TERMINAL_PRIMITIVE_METADATA_KEY: True}
 
     agent = _build_drain_test_agent(t_pause)
@@ -252,8 +269,7 @@ def test_drain_skips_wrapup_when_interrupt_pauses_graph():
     first_int = result["__interrupt__"][0]
     val = getattr(first_int, "value", first_int)
     assert val == {"q": "USD or JPY?"}, (
-        f"Interrupt payload mismatch: expected {{'q': 'USD or JPY?'}}, "
-        f"got {val!r}"
+        f"Interrupt payload mismatch: expected {{'q': 'USD or JPY?'}}, " f"got {val!r}"
     )
 
     # 2. The wrap-up's signature must NOT appear in the result messages.
@@ -285,6 +301,7 @@ def test_drain_falls_through_to_wrapup_when_no_interrupt():
     new guard — the existing wrap-up still fires when the cap is hit
     without an interrupt."""
     from langchain_core.tools import tool
+
     from ryoma_ai.agent.workflow import (
         TERMINAL_PRIMITIVE_METADATA_KEY,
         ToolMode,
@@ -294,6 +311,7 @@ def test_drain_falls_through_to_wrapup_when_no_interrupt():
     def t_pause(question: str) -> str:
         """Stub: marked terminal but doesn't actually interrupt."""
         return f"answered:{question}"
+
     t_pause.metadata = {TERMINAL_PRIMITIVE_METADATA_KEY: True}
 
     agent = _build_drain_test_agent(t_pause)
@@ -332,13 +350,13 @@ def test_drain_guard_uses_structural_interrupts_check():
     them is the wrong view.
     """
     import inspect
+
     from ryoma_ai.agent import workflow
+
     src = inspect.getsource(workflow.WorkflowAgent.invoke)
 
     # The guard must reference at least one of the two canonical views.
-    references_task_interrupts = (
-        ".interrupts" in src and ".tasks" in src
-    )
+    references_task_interrupts = ".interrupts" in src and ".tasks" in src
     references_result_interrupt = '"__interrupt__"' in src or "'__interrupt__'" in src
     assert references_task_interrupts or references_result_interrupt, (
         "PR-B': WorkflowAgent.invoke must reference either "

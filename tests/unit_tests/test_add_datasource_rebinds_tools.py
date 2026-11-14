@@ -18,6 +18,7 @@ These tests use REAL instances throughout: real ``SqliteDataSource``
 ``WorkflowAgent`` subclass that bypasses only the parts of init that
 require a live LLM (we don't exercise the model in these tests).
 """
+
 from __future__ import annotations
 
 import pytest
@@ -85,9 +86,9 @@ def test_add_datasource_returns_self_for_chaining(real_datasource):
 
     result = agent.add_datasource(real_datasource)
 
-    assert result is agent, (
-        "add_datasource must return self for chaining (existing contract)."
-    )
+    assert (
+        result is agent
+    ), "add_datasource must return self for chaining (existing contract)."
 
 
 def test_add_datasource_chaining_works_with_real_agent(real_datasource):

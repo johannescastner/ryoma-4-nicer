@@ -17,12 +17,10 @@ class ArrowAgent(WorkflowAgent):
 
     def add_table(self, table: pa.Table):
         table_id = f"table_{id(table)}"
-        self.add_prompt_context(
-            f"""
+        self.add_prompt_context(f"""
         pyarrow table name: {table_id}
         pyarrow table metadata: {table.schema}
-        """
-        )
+        """)
         for tool in self.tools:
             if isinstance(tool, PythonTool):
                 tool.update_script_context(script_context={table_id: table})

@@ -35,7 +35,7 @@ def render_output_item(
         DataframeOutput,
         ErrorOutput,
         UnknownOutput,
-    ]
+    ],
 ) -> rx.Component:
     return rx.box(
         rx.cond(
@@ -82,6 +82,6 @@ def render_output(
             ErrorOutput,
             UnknownOutput,
         ]
-    ]
+    ],
 ) -> rx.Component:
     return rx.vstack(rx.foreach(output, render_output_item))

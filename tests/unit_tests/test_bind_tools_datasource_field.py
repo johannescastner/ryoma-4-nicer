@@ -19,6 +19,7 @@ These tests use REAL instances throughout: real ``SqliteDataSource``
 real ``WorkflowAgent`` subclass. No mocks — mocks would seed false
 confidence and bleed into production patterns.
 """
+
 from __future__ import annotations
 
 import ast
@@ -73,12 +74,14 @@ def agent_with_sql_tools(real_datasource):
     subclasses + a registered real datasource. Uses ``add_datasource``
     so the test's pre-condition exercises the SAME post-init path
     baby-NICER uses (``reflective.py:1942``)."""
-    agent = _MinimalWorkflowAgent([
-        SqlQueryTool(),
-        CreateTableTool(),
-        QueryProfileTool(),
-        QueryPlanTool(),
-    ])
+    agent = _MinimalWorkflowAgent(
+        [
+            SqlQueryTool(),
+            CreateTableTool(),
+            QueryProfileTool(),
+            QueryPlanTool(),
+        ]
+    )
     agent.add_datasource(real_datasource)
     return agent
 
@@ -86,7 +89,9 @@ def agent_with_sql_tools(real_datasource):
 def test_assign_assigns_datasource_to_sql_query_tool(
     agent_with_sql_tools, real_datasource
 ):
-    sql_tool = next(t for t in agent_with_sql_tools.tools if isinstance(t, SqlQueryTool))
+    sql_tool = next(
+        t for t in agent_with_sql_tools.tools if isinstance(t, SqlQueryTool)
+    )
     assert sql_tool.datasource is real_datasource, (
         "SqlQueryTool declares ``datasource`` as a Pydantic field; the new "
         "gate must assign the registered datasource to it."
@@ -100,7 +105,9 @@ def test_assign_assigns_datasource_to_query_profile_tool(
     stayed at ``None`` because the gate ``hasattr(tool, "type")`` failed,
     and ``SqlAgent.__init__`` only special-cased ``SqlQueryTool``.
     """
-    qp_tool = next(t for t in agent_with_sql_tools.tools if isinstance(t, QueryProfileTool))
+    qp_tool = next(
+        t for t in agent_with_sql_tools.tools if isinstance(t, QueryProfileTool)
+    )
     assert qp_tool.datasource is real_datasource, (
         "QueryProfileTool declares ``datasource`` as a Pydantic field; the new "
         "gate must assign the registered datasource. Pre-fix this assignment "
@@ -115,7 +122,9 @@ def test_assign_assigns_datasource_to_create_table_tool(
     broken pre-fix. It is normally stripped in baby-NICER but the
     upstream ryoma gate must still cover it for any non-baby-NICER
     consumer."""
-    ct_tool = next(t for t in agent_with_sql_tools.tools if isinstance(t, CreateTableTool))
+    ct_tool = next(
+        t for t in agent_with_sql_tools.tools if isinstance(t, CreateTableTool)
+    )
     assert ct_tool.datasource is real_datasource
 
 
@@ -125,7 +134,9 @@ def test_assign_assigns_datasource_to_query_plan_tool(
     """QueryPlanTool is dead code in current ``SqlAgent.__init__`` (never
     instantiated) but exists in upstream and was equally broken.
     Coverage protects any future consumer that uses it."""
-    plan_tool = next(t for t in agent_with_sql_tools.tools if isinstance(t, QueryPlanTool))
+    plan_tool = next(
+        t for t in agent_with_sql_tools.tools if isinstance(t, QueryPlanTool)
+    )
     assert plan_tool.datasource is real_datasource
 
 

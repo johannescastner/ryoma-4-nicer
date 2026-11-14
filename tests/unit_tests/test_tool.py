@@ -1,3 +1,4 @@
+import sys
 from unittest.mock import patch
 
 import pandas as pd
@@ -29,8 +30,18 @@ def mock_sql_data_source():
 
 
 @pytest.fixture
-def pyspark_session():
-    return SparkSession.builder.appName("pytest").getOrCreate()
+def pyspark_session(monkeypatch):
+    monkeypatch.setenv("PYSPARK_PYTHON", sys.executable)
+    session = (
+        SparkSession.builder.master("local[2]")
+        .appName("pytest")
+        .config("spark.ui.enabled", "false")
+        .getOrCreate()
+    )
+    try:
+        yield session
+    finally:
+        session.stop()
 
 
 def test_pyspark_tool(pyspark_session, pandas_dataframe):

@@ -53,7 +53,7 @@ class DuckDBDataSource(SqlDataSource):
         conn = self.connect()
         # TODO: Should we abstract this to support other backends?
         inspect.currentframe().f_locals.update(**kwargs)
-        return conn.sql(query).execute().fetchdf()
+        return conn.sql(query).fetchdf()
 
     def register(self, name: str, data: Any, **kwargs):
         conn = self.connect()

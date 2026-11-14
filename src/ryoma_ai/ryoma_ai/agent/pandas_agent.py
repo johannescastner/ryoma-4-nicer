@@ -46,12 +46,10 @@ class PandasAgent(WorkflowAgent):
         dataframe.info(buf=buffer)
         metadata_str = buffer.getvalue()
 
-        self.add_prompt_context(
-            f"""
+        self.add_prompt_context(f"""
             dataframe name: {df_name}
             dataframe metadata:\n{metadata_str}
-            """
-        )
+            """)
 
         # Inject into PythonTool script context
         for tool in self.tools:

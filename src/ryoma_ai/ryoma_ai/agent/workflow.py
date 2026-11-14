@@ -4,7 +4,6 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 from IPython.display import Image, display
-from langchain_core.tools.render import render_text_description
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolCall, ToolMessage
 from langchain_core.prompt_values import ChatPromptValue
@@ -15,6 +14,7 @@ from langchain_core.prompts import (
 )
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
+from langchain_core.tools.render import render_text_description
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph
@@ -376,13 +376,26 @@ class WorkflowAgent(ChatAgent):
                 queued_calls = getattr(last, "tool_calls", None) or []
                 tools_by_name = {t.name: t for t in self.tools}
                 if queued_calls and all(
-                    _is_terminal_tool(tools_by_name.get(tc["name"] if isinstance(tc, dict) else getattr(tc, "name", None)))
+                    _is_terminal_tool(
+                        tools_by_name.get(
+                            tc["name"]
+                            if isinstance(tc, dict)
+                            else getattr(tc, "name", None)
+                        )
+                    )
                     for tc in queued_calls
                 ):
                     logging.info(
                         "WorkflowAgent.invoke: draining terminal-"
                         "primitive tool(s) %s past iteration cap.",
-                        [tc["name"] if isinstance(tc, dict) else getattr(tc, "name", None) for tc in queued_calls],
+                        [
+                            (
+                                tc["name"]
+                                if isinstance(tc, dict)
+                                else getattr(tc, "name", None)
+                            )
+                            for tc in queued_calls
+                        ],
                     )
                     result = self.workflow.invoke(None, config=self.config)
                     if display:
@@ -415,8 +428,7 @@ class WorkflowAgent(ChatAgent):
             # 16:23:31 (build 82d0ec4c) and standalone-reproduced via
             # ``/tmp/probe_drain_state.py``.
             interrupts_in_result = (
-                bool(result.get("__interrupt__"))
-                if isinstance(result, dict) else False
+                bool(result.get("__interrupt__")) if isinstance(result, dict) else False
             )
             interrupts_in_state = any(
                 getattr(t, "interrupts", None)
@@ -428,7 +440,8 @@ class WorkflowAgent(ChatAgent):
                     "after terminal-primitive drain; skipping wrap-up "
                     "synthesis. result['__interrupt__']=%s, "
                     "state.tasks.interrupts=%s",
-                    interrupts_in_result, interrupts_in_state,
+                    interrupts_in_result,
+                    interrupts_in_state,
                 )
                 return result
 
